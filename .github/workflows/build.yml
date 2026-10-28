@@ -54,9 +54,12 @@ jobs:
           KEYSTORE: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE" ]; then
-            mkdir -p "$HOME/.android"
-            printf '%s' "$KEYSTORE" | base64 --decode > "$HOME/.android/debug.keystore"
-            chmod 600 "$HOME/.android/debug.keystore"
+            mkdir -p "$RUNNER_TEMP/hypercal-signing"
+            printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/hypercal-signing/debug.keystore"
+            chmod 600 "$RUNNER_TEMP/hypercal-signing/debug.keystore"
+            fingerprint=$(keytool -exportcert -keystore "$RUNNER_TEMP/hypercal-signing/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d" " -f1)
+            test "$fingerprint" = c16f4c95c2d012620f845c8efac2e190497e3e85a8fba0035b21677528594793
+            echo "HYPERCAL_DEBUG_KEYSTORE=$RUNNER_TEMP/hypercal-signing/debug.keystore" >> "$GITHUB_ENV"
           fi
       - name: Build Android APK
         working-directory: android
