@@ -126,6 +126,28 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
   try {
     const alice = await loginAs("alice");
     const bob = await loginAs("bob");
+    const preferences = await fetch(`${origin}/api/preferences`, {
+      method: "PATCH",
+      headers: alice,
+      body: JSON.stringify({ notificationDefault: "120" }),
+    });
+    assert.equal(preferences.status, 200);
+    assert.deepEqual(await preferences.json(), { notificationDefault: "120" });
+    const aliceSession = await (
+      await fetch(`${origin}/api/session`, { headers: alice })
+    ).json();
+    const bobSession = await (
+      await fetch(`${origin}/api/session`, { headers: bob })
+    ).json();
+    assert.equal(aliceSession.notificationDefault, "120");
+    assert.equal(bobSession.notificationDefault, "calendar");
+    const invalidPreference = await fetch(`${origin}/api/preferences`, {
+      method: "PATCH",
+      headers: alice,
+      body: JSON.stringify({ notificationDefault: "40321" }),
+    });
+    assert.equal(invalidPreference.status, 400);
+    await invalidPreference.json();
     const cs = await (
       await fetch(`${origin}/api/calendars`, { headers: alice })
     ).json();
@@ -140,7 +162,7 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       end: "2026-10-28T11:00:00Z",
       allDay: false,
       timeZone: "Europe/Bratislava",
-      reminderMinutes: 10,
+      reminderMinutes: 120,
       color: "#18ab72",
     };
     const created = await fetch(`${origin}/api/events`, {
@@ -159,7 +181,7 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     assert.equal(upstream[0].start.timeZone, "Europe/Bratislava");
     assert.deepEqual(upstream[0].reminders, {
       useDefault: false,
-      overrides: [{ method: "popup", minutes: 10 }],
+      overrides: [{ method: "popup", minutes: 120 }],
     });
     const q = new URLSearchParams({
       from: "2026-10-28T00:00:00Z",

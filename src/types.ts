@@ -37,6 +37,7 @@ export interface SavedView {
   hideAllDay: boolean;
 }
 export interface Session {
+  notificationDefault?: string;
   connected: boolean;
   configured: boolean;
   user: { id: string; email: string } | null;

@@ -13,6 +13,33 @@ export const eventColors = [
   { id: "10", name: "Basil", hex: "#0b8043" },
   { id: "11", name: "Tomato", hex: "#d50000" },
 ];
+// Default swatches sampled from the user’s Google Calendar reference.
+export const defaultEventColors = [
+  { name: "Cherry", hex: "#c05476" },
+  { name: "Rose", hex: "#d85675" },
+  { name: "Coral", hex: "#d6837a" },
+  { name: "Tomato", hex: "#da5234" },
+  { name: "Tangerine", hex: "#e3683e" },
+  { name: "Pumpkin", hex: "#dd7835" },
+  { name: "Mango", hex: "#e0963c" },
+  { name: "Banana", hex: "#e7ba51" },
+  { name: "Gold", hex: "#d8be5e" },
+  { name: "Citron", hex: "#bcc256" },
+  { name: "Avocado", hex: "#85ad59" },
+  { name: "Basil", hex: "#489160" },
+  { name: "Eucalyptus", hex: "#55b080" },
+  { name: "Teal", hex: "#429a8e" },
+  { name: "Peacock", hex: "#4b99d2" },
+  { name: "Cornflower", hex: "#668be1" },
+  { name: "Blueberry", hex: "#828bc2" },
+  { name: "Lavender", hex: "#6e72c3" },
+  { name: "Lilac", hex: "#ae9cce" },
+  { name: "Grape", hex: "#a479b1" },
+  { name: "Amethyst", hex: "#a75aba" },
+  { name: "Cocoa", hex: "#957367" },
+  { name: "Graphite", hex: "#7c7c7c" },
+  { name: "Birch", hex: "#a5998c" },
+];
 export function eventColor(event, calendars) {
   return (
     event.color ||

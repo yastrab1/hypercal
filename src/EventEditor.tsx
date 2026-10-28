@@ -1,4 +1,6 @@
-import { eventColors } from "./event-colors.mjs";
+import { NotificationPicker } from "./NotificationPicker";
+import { notificationFields } from "./notifications.mjs";
+import { defaultEventColors } from "./event-colors.mjs";
 import { useEffect, useRef, useState } from "react";
 import { addDays, format } from "date-fns";
 import {
@@ -24,6 +26,7 @@ export function EventEditor({
   live,
   offline,
   email,
+  notificationDefault,
   onSave,
   onDelete,
   onClose,
@@ -34,6 +37,7 @@ export function EventEditor({
   live: boolean;
   offline: boolean;
   email?: string;
+  notificationDefault: string;
   onSave: (e: CalendarEvent, recurrence: string) => Promise<void>;
   onDelete: (e: CalendarEvent) => Promise<void>;
   onClose: () => void;
@@ -49,14 +53,15 @@ export function EventEditor({
       calendars.find((c) => !c.readOnly)?.id ||
       "",
   );
-  const initialReminder =
-    event?.reminderMinutes === null
+  const initialReminder = !event
+    ? notificationDefault
+    : event.reminderMinutes === null
       ? "none"
-      : event?.reminderMinutes === undefined
-        ? "default"
+      : event.reminderMinutes === undefined
+        ? "calendar"
         : String(event.reminderMinutes);
   const [reminder, setReminder] = useState(initialReminder),
-    [reminderChanged, setReminderChanged] = useState(false);
+    [reminderChanged, setReminderChanged] = useState(!event);
   const form = useRef<HTMLFormElement>(null);
   const readOnly = !!event?.readOnly;
   const disabled = readOnly || offline || busy;
@@ -111,14 +116,7 @@ export function EventEditor({
           source: live ? "google" : "demo",
           etag: event?.etag,
           timeZone: timezone,
-          ...(reminderChanged
-            ? reminder === "default"
-              ? { useDefaultReminders: true }
-              : {
-                  reminderMinutes:
-                    reminder === "none" ? null : Number(reminder),
-                }
-            : {}),
+          ...(reminderChanged ? notificationFields(reminder) : {}),
         },
         String(f.get("recurrence") || "none"),
       );
@@ -330,9 +328,9 @@ export function EventEditor({
             >
               Calendar default
             </button>
-            {eventColors.map((c) => (
+            {defaultEventColors.map((c) => (
               <button
-                key={c.id}
+                key={c.hex}
                 type="button"
                 className="color-swatch"
                 style={{ background: c.hex }}
@@ -374,41 +372,13 @@ export function EventEditor({
           <label className="event-detail-row">
             <Bell size={20} />
             <span className="sr-only">Notification</span>
-            <select
-              aria-label="Notification"
+            <NotificationPicker
               value={reminder}
-              onChange={(e) => {
-                setReminder(e.target.value);
+              onChange={(value) => {
+                setReminder(value);
                 setReminderChanged(true);
               }}
-            >
-              <option value="default">Calendar default notification</option>
-              <option value="none">No notification</option>
-              {[0, 5, 10, 15, 30, 60, 1440].map((minutes) => (
-                <option key={minutes} value={String(minutes)}>
-                  {minutes === 0
-                    ? "At event time"
-                    : minutes === 1440
-                      ? "1 day before"
-                      : minutes === 60
-                        ? "1 hour before"
-                        : `${minutes} minutes before`}
-                </option>
-              ))}
-              {![
-                "default",
-                "none",
-                "0",
-                "5",
-                "10",
-                "15",
-                "30",
-                "60",
-                "1440",
-              ].includes(reminder) && (
-                <option value={reminder}>{reminder} minutes before</option>
-              )}
-            </select>
+            />
           </label>
         </div>
         <div className="event-editor-section">

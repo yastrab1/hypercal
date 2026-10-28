@@ -31,7 +31,9 @@ export function CalendarCanvas({
   onCreate,
   onDate,
   onExpandDay,
+  readOnly = false,
 }: {
+  readOnly?: boolean;
   layout: Layout;
   date: Date;
   events: CalendarEvent[];
@@ -206,6 +208,7 @@ export function CalendarCanvas({
                         {format(day, "d")}
                       </button>
                       <button
+                        disabled={readOnly}
                         className="cell-create"
                         aria-label={`Create event on ${format(day, "MMMM d")}`}
                         onClick={() => onCreate(day)}
@@ -371,6 +374,7 @@ export function CalendarCanvas({
                 {Array.from({ length: 24 }, (_, h) => (
                   <button
                     key={h}
+                    disabled={readOnly}
                     className="hour-slot"
                     tabIndex={h === 9 && isSameDay(d, date) ? 0 : -1}
                     data-day={format(d, "yyyy-MM-dd")}

@@ -4,6 +4,7 @@ import {
   googleColorFields,
   readEventColor,
   eventColor,
+  defaultEventColors,
 } from "../src/event-colors.mjs";
 import { copiedEventBody } from "../server/copy-event.mjs";
 
@@ -46,4 +47,11 @@ test("reset colors inherit the calendar; copies retain only HyperCal color metad
   assert.deepEqual(copy.extendedProperties, {
     private: { hypercalColor: "#18ab72" },
   });
+});
+
+test("reference swatches preserve their exact color through Google metadata", () => {
+  assert.equal(defaultEventColors.length, 24);
+  assert.equal(new Set(defaultEventColors.map((c) => c.hex)).size, 24);
+  for (const color of defaultEventColors)
+    assert.equal(readEventColor(googleColorFields(color.hex)), color.hex);
 });

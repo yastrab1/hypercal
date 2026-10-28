@@ -20,6 +20,37 @@ public class FullscreenTest {
             assertFullWindow(scenario);
         }
     }
+    @Test public void backReturnsToMonthThenExits() throws Exception {
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            waitForDOM(scenario,"!!document.querySelector('.views-nav')");
+            scenario.onActivity(activity -> activity.getBridge().getWebView().evaluateJavascript(
+                "(()=>{document.querySelector('.mobile-menu').click();[...document.querySelectorAll('.views-nav .view-link')].find(b=>b.textContent.trim()==='Week').click();return true})()", null));
+            waitForDOM(scenario,"!!document.querySelector('.time-week')");
+            scenario.onActivity(activity -> activity.getOnBackPressedDispatcher().onBackPressed());
+            waitForDOM(scenario,"!!document.querySelector('.month-view')");
+            scenario.onActivity(activity -> activity.getBridge().getWebView().evaluateJavascript(
+                "(()=>{const b=document.querySelector('.month-events .event-chip')||document.querySelector('.calendar-ribbon');if(b)b.click();return !!b})()",null));
+            waitForDOM(scenario,"!!document.querySelector('.event-preview')");
+            scenario.onActivity(activity -> activity.getOnBackPressedDispatcher().onBackPressed());
+            waitForDOM(scenario,"!document.querySelector('.event-preview')&&!!document.querySelector('.month-view')");
+            scenario.onActivity(activity -> activity.getOnBackPressedDispatcher().onBackPressed());
+            long deadline=System.currentTimeMillis()+15000;
+            while(scenario.getState()!=androidx.lifecycle.Lifecycle.State.DESTROYED&&System.currentTimeMillis()<deadline) Thread.sleep(100);
+            assertEquals("Back from Month closes the activity",androidx.lifecycle.Lifecycle.State.DESTROYED,scenario.getState());
+        }
+    }
+    private void waitForDOM(ActivityScenario<MainActivity> scenario,String expression) throws Exception {
+        java.util.concurrent.atomic.AtomicReference<String> result=new java.util.concurrent.atomic.AtomicReference<>();
+        long deadline=System.currentTimeMillis()+30000;
+        do {
+            java.util.concurrent.CountDownLatch callback=new java.util.concurrent.CountDownLatch(1);
+            scenario.onActivity(activity -> activity.getBridge().getWebView().evaluateJavascript(expression,value->{result.set(value);callback.countDown();}));
+            callback.await(3,java.util.concurrent.TimeUnit.SECONDS);
+            if("true".equals(result.get())) return;
+            Thread.sleep(100);
+        } while(System.currentTimeMillis()<deadline);
+        assertEquals(expression,"true",result.get());
+    }
     private void assertFullWindow(ActivityScenario<MainActivity> scenario) throws Exception {
         // Wait for the first native layout and system-bar hide transaction.
         long deadline = System.currentTimeMillis() + 10000;
@@ -50,7 +81,7 @@ public class FullscreenTest {
         do {
             java.util.concurrent.CountDownLatch callback = new java.util.concurrent.CountDownLatch(1);
             scenario.onActivity(activity -> activity.getBridge().getWebView().evaluateJavascript(
-                "(()=>{const app=document.querySelector('.app-shell');const canvas=document.querySelector('.calendar-surface');return !!app&&!!canvas&&Math.abs(app.getBoundingClientRect().height-innerHeight)<2&&Math.abs(canvas.getBoundingClientRect().bottom-innerHeight)<2&&document.documentElement.scrollWidth===innerWidth})()",
+                "(()=>{const app=document.querySelector('.app-shell');const canvas=document.querySelector('.calendar-surface');const workspace=document.querySelector('.workspace');const toolbar=document.querySelector('.topbar');document.documentElement.style.setProperty('--safe-area-inset-top','80px');document.documentElement.style.setProperty('--safe-area-inset-bottom','40px');return !!workspace&&!!toolbar&&parseFloat(getComputedStyle(workspace).paddingTop)===0&&parseFloat(getComputedStyle(workspace).paddingBottom)===0&&Math.abs(toolbar.getBoundingClientRect().height-60)<2&&Math.abs(toolbar.getBoundingClientRect().top)<2&&!!app&&!!canvas&&Math.abs(app.getBoundingClientRect().height-innerHeight)<2&&Math.abs(canvas.getBoundingClientRect().bottom-innerHeight)<2&&document.documentElement.scrollWidth===innerWidth})()",
                 value -> {result.set(value); callback.countDown();}));
             callback.await(3, java.util.concurrent.TimeUnit.SECONDS);
             if ("true".equals(result.get())) break;

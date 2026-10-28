@@ -3521,8 +3521,7 @@ kbd {
     display: none;
   }
 }
-/* Native content paints the entire window. Only actual cutouts remain inset;
-   the root background matches the app, never the Android default gray. */
+/* Native content paints the entire window without compatibility spacers. */
 html:has(.app-shell.native),
 body:has(.app-shell.native),
 body:has(.app-shell.native) #root {
@@ -3540,15 +3539,11 @@ body:has(.app-shell.native) #root {
   background: var(--paper);
 }
 .native .workspace {
-  padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
-  padding-bottom: var(
-    --safe-area-inset-bottom,
-    env(safe-area-inset-bottom, 0px)
-  );
+  padding: 0;
   background: var(--paper);
 }
 .native .sidebar {
-  padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  padding-top: 0;
   height: 100dvh;
 }
 .popover-action-section {
@@ -3604,11 +3599,14 @@ body,
   padding: 0;
 }
 .native .topbar {
-  padding-top: max(10px, env(safe-area-inset-top));
-  height: calc(60px + env(safe-area-inset-top));
+  padding-top: 10px;
+  height: 60px;
 }
 .native .mobile-menu {
-  top: calc(14px + env(safe-area-inset-top));
+  top: 14px;
+}
+body:has(.app-shell.native) .event-panel {
+  padding-block: 0;
 }
 .period-track {
   position: relative;
@@ -3779,4 +3777,280 @@ body,
   padding: 4px 7px;
   color: var(--text);
   font-size: 12px;
+}
+
+.event-color-options {
+  display: grid;
+  grid-template-columns: repeat(13, 18px);
+  gap: 6px;
+  padding: 10px 0 12px 35px;
+}
+.event-color-options .color-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 1px;
+}
+.event-color-options .color-default {
+  grid-column: 1/-1;
+  order: 2;
+  margin-top: 5px;
+}
+@media (max-width: 360px) {
+  .event-color-options {
+    grid-template-columns: repeat(10, 18px);
+  }
+}
+.notification-picker {
+  flex: 1;
+  min-width: 0;
+}
+.notification-picker > select {
+  width: 100%;
+}
+.custom-notification {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.custom-notification input {
+  width: 75px;
+  flex: 0 0 75px;
+}
+.custom-notification select {
+  flex: 1;
+  min-width: 85px;
+}
+.custom-notification span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.notification-defaults h3 {
+  font-size: 15px;
+}
+.notification-defaults .notification-picker {
+  margin-block: 12px;
+}
+.notification-defaults select,
+.notification-defaults input {
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--raised);
+  color: var(--text);
+}
+.desktop-menu {
+  display: none;
+}
+@media (min-width: 761px) {
+  .desktop-menu {
+    display: inline-flex;
+    margin-right: 8px;
+  }
+  .desktop-collapsed > .sidebar {
+    display: none;
+  }
+}
+.shared-space {
+  height: 100dvh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  color: var(--text);
+  min-height: 0;
+}
+.shared-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  min-height: 60px;
+  background: var(--chrome);
+  flex-shrink: 0;
+}
+.shared-toolbar h1 {
+  font-size: 19px;
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+}
+.shared-toolbar select {
+  padding: 7px;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.shared-hub,
+.sharing-intro {
+  max-width: 640px;
+  width: 100%;
+  padding: 32px 24px;
+  margin: 0 auto;
+  overflow: auto;
+}
+.shared-hub h2,
+.sharing-intro h2 {
+  font-size: 23px;
+  font-weight: 500;
+}
+.shared-hub p,
+.sharing-intro p {
+  line-height: 1.6;
+  font-size: 14px;
+}
+.shared-create {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+.shared-view-entry {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  width: 100%;
+  text-align: left;
+  padding: 17px 4px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.shared-view-entry span {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.shared-view-entry strong {
+  font-size: 15px;
+  font-weight: 500;
+}
+.shared-view-entry small,
+.shared-member small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+.shared-hub > .secondary-button {
+  margin-top: 20px;
+}
+.shared-date-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 20px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+.shared-date-line span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.shared-calendar {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.shared-calendar .cell-create {
+  display: none;
+}
+.shared-calendar .year-grid {
+  height: 100%;
+  overflow: auto;
+}
+.shared-empty {
+  position: absolute;
+  bottom: 15px;
+  left: 15px;
+  background: var(--raised);
+  padding: 10px 13px;
+  border-radius: 6px;
+  font-size: 12px;
+  max-width: 80%;
+  pointer-events: none;
+}
+.shared-settings h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 25px 0 12px;
+}
+.shared-member {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.shared-member > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.contribution {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 10px;
+}
+.contribution > select {
+  width: 100%;
+  padding: 8px;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 12px;
+  margin: 8px 0;
+}
+.contribution .checkbox-field {
+  font-size: 11px;
+  line-height: 1.5;
+}
+.generated-share-link {
+  margin-top: 20px;
+  padding: 12px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.generated-share-link .field input {
+  font-size: 11px;
+}
+@media (max-width: 760px) {
+  .shared-toolbar {
+    padding: 10px 8px;
+    gap: 3px;
+  }
+  .shared-toolbar h1 {
+    font-size: 16px;
+  }
+  .shared-toolbar select {
+    font-size: 11px;
+    max-width: 80px;
+  }
+  .shared-list-button {
+    font-size: 0;
+    padding: 3px;
+  }
+  .shared-list-button:after {
+    content: "Views";
+    font-size: 10px;
+  }
+  .shared-date-line {
+    padding: 8px 12px;
+  }
+}
+.shared-calendar.calendar-surface {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.shared-calendar .hour-slot:disabled {
+  opacity: 1;
+  cursor: default;
 }

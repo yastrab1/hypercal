@@ -1,3 +1,11 @@
+import {
+  SharedSpace,
+  sharedRouteFromLocation,
+  clearSharedRoute,
+  type SharedView,
+  type SharedRoute,
+} from "./SharedSpace";
+import { NotificationDefaults } from "./NotificationPicker";
 import { shiftPeriod } from "./period.mjs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -15,6 +23,7 @@ import {
 } from "date-fns";
 import {
   CalendarDays,
+  Users,
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -122,6 +131,15 @@ const shortcutGroups = [
   },
 ];
 export default function App() {
+  const [sharedRoute, setSharedRoute] = useState<SharedRoute | null>(
+    sharedRouteFromLocation,
+  );
+  const [sharedViews, setSharedViews] = useState<SharedView[]>([]);
+  useEffect(() => {
+    const update = () => setSharedRoute(sharedRouteFromLocation());
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
   const [cachedStart] = useState(() => calendarCache.readLast());
   const [online, setOnline] = useState(navigator.onLine);
   const [verified, setVerified] = useState(false);
@@ -169,6 +187,16 @@ export default function App() {
         }
       : null,
   );
+  const [notificationDefault, setNotificationDefault] = useState("calendar");
+  useEffect(() => {
+    setNotificationDefault(
+      session?.notificationDefault ??
+        stored<string>(
+          `hypercal.notificationDefault.${session?.user?.id || "demo"}`,
+          "calendar",
+        ),
+    );
+  }, [session?.user?.id, session?.notificationDefault]);
   const [bootError, setBootError] = useState("");
   const [calendars, setCalendars] = useState<Calendar[]>(
     cachedStart?.calendars || demoCalendars,
@@ -241,6 +269,9 @@ export default function App() {
 
   const [search, setSearch] = useState("");
   const [sidebar, setSidebar] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(() =>
+    stored("hypercal.sidebarCollapsed", false),
+  );
   const [shortcuts, setShortcuts] = useState(() =>
     stored("hypercal.shortcuts", true),
   );
@@ -374,17 +405,30 @@ export default function App() {
     }
   }
   const close = useCallback(() => setPanel(null), []);
+  const backAction = useRef<() => void>(() => {});
+  backAction.current = () => {
+    if (panel || preview || expandedDay || sharedRoute || layout !== "month") {
+      setPanel(null);
+      setPreview(null);
+      setExpandedDay(null);
+      setSidebar(false);
+      setSharedRoute(null);
+      clearSharedRoute();
+      setLayout("month");
+      setActiveView(getDefaultView(views, "month")?.id || null);
+    } else if (sidebar) setSidebar(false);
+    else NativeApp.exitApp();
+  };
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    const listener = NativeApp.addListener("backButton", () => {
-      if (panel) setPanel(null);
-      else if (sidebar) setSidebar(false);
-      else NativeApp.minimizeApp();
-    });
+    // One native listener reads current state, avoiding async remove/add races.
+    const listener = NativeApp.addListener("backButton", () =>
+      backAction.current(),
+    );
     return () => {
-      listener.then((x) => x.remove());
+      listener.then((handle) => handle.remove());
     };
-  }, [panel, sidebar]);
+  }, []);
   const flash = (text: string) => {
     setNotice(text);
     setTimeout(() => setNotice(""), 4500);
@@ -445,6 +489,7 @@ export default function App() {
     let cancelled = false;
     if (dataAccount !== accountId) {
       const saved = calendarCache.readAccount(accountId);
+      setSharedViews([]);
       setCalendars(saved?.calendars || []);
       setViews(saved?.views || []);
       setVisible((saved?.calendars || []).map((c) => c.id));
@@ -455,8 +500,13 @@ export default function App() {
       setDataAccount(accountId);
     }
     if (!verified || !online) return;
-    Promise.all([api<Calendar[]>("/calendars"), api<SavedView[]>("/views")])
-      .then(([c, v]) => {
+    Promise.all([
+      api<Calendar[]>("/calendars"),
+      api<SavedView[]>("/views"),
+      api<SharedView[]>("/shared-views"),
+    ])
+      .then(([c, v, shared]) => {
+        setSharedViews(shared);
         if (cancelled) return;
         setCalendars(c);
         setVisible((ids) => {
@@ -650,6 +700,7 @@ export default function App() {
   }
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
+      if (sharedRoute) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPanel((p) => (p === "palette" ? null : "palette"));
@@ -950,15 +1001,39 @@ export default function App() {
       action: () => setPanel("shortcuts"),
     },
   ];
+  if (sharedRoute)
+    return (
+      <SharedSpace
+        key={`${sharedRoute.kind}:${sharedRoute.id || ""}`}
+        route={sharedRoute}
+        connected={live}
+        calendars={calendars}
+        draft={{
+          name: active?.name || labels[layout],
+          layout,
+          include: active?.include || "",
+          exclude: active?.exclude || "",
+          hideAllDay: active?.hideAllDay || false,
+        }}
+        onConnect={connectGoogle}
+        onClose={() => {
+          clearSharedRoute();
+          setSharedRoute(null);
+          setLayout("month");
+          setActiveView(getDefaultView(views, "month")?.id || null);
+          setMetadataRefresh((n) => n + 1);
+        }}
+      />
+    );
   return (
     <div
-      className={`app-shell ${Capacitor.isNativePlatform() ? "native" : ""}`}
+      className={`app-shell ${desktop && desktopCollapsed ? "desktop-collapsed" : ""} ${Capacitor.isNativePlatform() ? "native" : ""}`}
     >
       <aside
         ref={drawerRef}
         style={!desktop ? { width: drawer.width } : undefined}
         className={`sidebar ${sidebar ? "open" : ""} ${drawer.dragging ? "dragging" : ""}`}
-        inert={!desktop && !sidebar}
+        inert={desktop ? desktopCollapsed : !sidebar}
       >
         <a className="brand" href="/" aria-label="HyperCal home">
           <span className="brand-symbol">H</span>
@@ -1157,6 +1232,30 @@ export default function App() {
                 </button>
               </div>
             ))}
+          {sharedViews.map((v) => (
+            <button
+              key={v.id}
+              className="view-link"
+              onClick={() => {
+                setSharedRoute({ kind: "view", id: v.id });
+                setSidebar(false);
+              }}
+            >
+              <Users size={17} />
+              <span>{v.name}</span>
+              <small className="view-layout-label">Shared</small>
+            </button>
+          ))}
+          <button
+            className="view-link"
+            onClick={() => {
+              setSharedRoute({ kind: "hub" });
+              setSidebar(false);
+            }}
+          >
+            <Users size={17} />
+            <span>Shared views</span>
+          </button>
         </nav>
         <section className="calendar-list">
           <div className="section-label">
@@ -1224,6 +1323,23 @@ export default function App() {
       />
       <main className="workspace" inert={!desktop && sidebar}>
         <header className="topbar">
+          <button
+            className="icon-button desktop-menu"
+            aria-label={
+              desktopCollapsed ? "Expand sidebar" : "Collapse sidebar"
+            }
+            onClick={() =>
+              setDesktopCollapsed((value) => {
+                localStorage.setItem(
+                  "hypercal.sidebarCollapsed",
+                  JSON.stringify(!value),
+                );
+                return !value;
+              })
+            }
+          >
+            <Menu size={21} />
+          </button>
           <button
             className="icon-button mobile-menu"
             aria-label="Open navigation"
@@ -1405,27 +1521,6 @@ export default function App() {
             {warnings.join(" ")}
           </div>
         )}
-        {active && (
-          <div className="active-view-bar">
-            <span>
-              <SlidersHorizontal size={14} /> {active.name}{" "}
-              <span className="muted">
-                · {selection.length} calendars
-                {active.exclude ? ` · excludes “${active.exclude}”` : ""}
-                {active.include ? ` · matches “${active.include}”` : ""}
-              </span>
-            </span>
-            <button
-              className="web-only"
-              onClick={() => {
-                setEditingView(active);
-                setPanel("view");
-              }}
-            >
-              Edit view
-            </button>
-          </div>
-        )}
         <div className="search-row">
           <Search size={14} />
           <input
@@ -1453,7 +1548,6 @@ export default function App() {
           ) : (
             <kbd>/</kbd>
           )}
-          <span>{filtered.length} events</span>
         </div>
         <div ref={surfaceRef} className="calendar-surface" aria-busy={busy}>
           <div className="period-track">
@@ -1572,6 +1666,7 @@ export default function App() {
             live={live}
             offline={live && !canWrite}
             email={session?.user?.email}
+            notificationDefault={notificationDefault}
             onClose={close}
             onSave={saveEvent}
             onDelete={deleteEvent}
@@ -1699,6 +1794,28 @@ export default function App() {
             </small>
           </label>
           <div className="settings-divider" />
+          <NotificationDefaults
+            value={notificationDefault}
+            disabled={live && !canWrite}
+            onSave={async (value) => {
+              if (live) {
+                await api("/preferences", {
+                  method: "PATCH",
+                  body: JSON.stringify({ notificationDefault: value }),
+                });
+                setSession((s) =>
+                  s ? { ...s, notificationDefault: value } : s,
+                );
+              }
+              localStorage.setItem(
+                `hypercal.notificationDefault.${session?.user?.id || "demo"}`,
+                JSON.stringify(value),
+              );
+              setNotificationDefault(value);
+              flash("Default notification saved.");
+            }}
+          />
+          <div className="settings-divider" />
           {canEditViews && (
             <section className="layout-default-settings">
               <h3>Default views</h3>
@@ -1760,11 +1877,11 @@ export default function App() {
             />
           </label>
           <div className="settings-divider" />
-          <h3>Coming later: shared views</h3>
+          <h3>Shared views</h3>
           <p>
             Invite friends with Google sign-in. Each member chooses calendars to
-            contribute. Private invitation links and read-only links are
-            planned; nothing is shared yet.
+            contribute. Open Shared views in the sidebar to create invitations
+            and read-only export links.
           </p>
         </Panel>
       )}
@@ -2022,7 +2139,7 @@ function ViewEditor({
       </div>
       <div className="inline-note">
         <Link size={14} />
-        Private to you. Shared views are planned.
+        Private to you. Share a view from the sidebar.
       </div>
     </form>
   );

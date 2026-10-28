@@ -1,3 +1,5 @@
+import { registerSharedViews } from "./shared-views.mjs";
+import { validNotification } from "../src/notifications.mjs";
 import { googleColorFields } from "../src/event-colors.mjs";
 import "dotenv/config";
 import express from "express";
@@ -117,6 +119,9 @@ app.get("/api/session", (req, res) => {
   res.json({
     connected: !!a,
     configured,
+    notificationDefault: a
+      ? a.preferences?.notificationDefault || "calendar"
+      : undefined,
     user: a ? { id: req.session.accountId, email: a.email } : null,
     csrf: req.session.csrf,
     appUrl,
@@ -241,6 +246,24 @@ function auth(req, res, next) {
       .json({ error: "Connect Google to use live calendars." });
   next();
 }
+app.patch("/api/preferences", auth, (req, res) => {
+  const { notificationDefault } = z
+    .object({
+      notificationDefault: z
+        .string()
+        .refine(
+          validNotification,
+          "Choose a notification from 0 minutes to 28 days.",
+        ),
+    })
+    .parse(req.body);
+  const account = getAccount(req.session.accountId);
+  upsertAccount(req.session.accountId, {
+    preferences: { ...account.preferences, notificationDefault },
+  });
+  res.json({ notificationDefault });
+});
+const sharedStore = registerSharedViews(app, auth, appUrl);
 app.post("/api/logout", (req, res) =>
   req.session.destroy(() => {
     res.clearCookie("hypercal.sid");
@@ -641,8 +664,9 @@ app.use((err, req, res, next) => {
       .status(400)
       .json({ error: err.issues[0]?.message || "Invalid input." });
   const status = err.status || err.response?.status || 400;
-  const message =
-    status === 412
+  const message = err.expose
+    ? err.message
+    : status === 412
       ? "This event changed in Google Calendar. Refresh before editing again."
       : status === 401
         ? "Google sign-in expired. Reconnect your account."
@@ -651,7 +675,7 @@ app.use((err, req, res, next) => {
           : status >= 500
             ? "The calendar service is unavailable. Please try again."
             : err.message || "Request failed.";
-  console.error(req.method, req.path, status);
+  console.error(req.method, req.route?.path || req.path, status);
   res
     .status(status >= 400 && status <= 599 ? status : 500)
     .json({ error: message });
@@ -666,3 +690,5 @@ const server = app.listen(
 );
 process.on("SIGTERM", () => server.close(() => process.exit(0)));
 export { app, server };
+
+server.on("close", () => sharedStore.close());
