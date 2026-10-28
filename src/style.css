@@ -4214,8 +4214,8 @@ body:has(.app-shell.native) .event-panel {
   color: var(--muted);
 }
 .year-grid .mini-month .mini-grid button {
-  width: 26px;
-  height: 26px;
+  width: min(26px, 100%);
+  height: auto;
   min-width: 0;
   min-height: 0;
   aspect-ratio: 1;
