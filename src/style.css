@@ -4244,9 +4244,9 @@ body:has(.app-shell.native) .event-panel {
 .header-tag-countdowns {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 6px;
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
   flex-wrap: wrap;
 }
@@ -4316,11 +4316,11 @@ button.tag-track {
   .header-tag-countdowns {
     order: 0;
     flex: 0 0 auto;
-    margin-left: auto;
+    margin-left: 8px;
     margin-right: 8px;
   }
   .topbar:has(.header-tag-countdowns) .mobile-header-actions {
-    margin-left: 0;
+    margin-left: auto;
   }
   .topbar:has(.header-tag-countdowns) .mobile-month-title {
     overflow: hidden;
