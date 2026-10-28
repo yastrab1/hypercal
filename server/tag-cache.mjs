@@ -50,9 +50,10 @@ export class TagCache {
   merge(data, event, local = false) {
     const id = key(event),
       old = data.events[id];
-    if (!local && old?.writeAt && this.now() - old.writeAt < PENDING_MS) {
+    const pending = old?.writeAt && this.now() - old.writeAt < PENDING_MS;
+    if (!local && pending) {
       // Read-after-write may lag in Google's list/search index. A direct matching
-      // response confirms the write; a stale response must not erase it.
+      // response must not release the grace window: another index may still lag.
       if (old.deleted) return null;
       if (
         old.event.etag !== event.etag ||
@@ -61,8 +62,11 @@ export class TagCache {
       )
         return old.event;
     }
-    if (event.tags?.length || local)
-      data.events[id] = { event, writeAt: local ? this.now() : 0 };
+    if (event.tags?.length || local || pending)
+      data.events[id] = {
+        event,
+        writeAt: local ? this.now() : pending ? old.writeAt : 0,
+      };
     else delete data.events[id];
     return event;
   }

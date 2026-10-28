@@ -29,6 +29,7 @@ test("tag cache survives process recreation, isolates accounts, and serves immed
       reopened.range("alice", "primary", "2027-01-20", "2027-01-21", [])[0].id,
       "one",
     );
+    reopened.remember("alice", [event]); // a fresh read can precede a stale index response
     assert.deepEqual(
       reopened.remember("alice", [{ ...event, tags: [], etag: "old" }])[0].tags,
       ["Exam"],
