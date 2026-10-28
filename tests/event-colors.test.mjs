@@ -17,7 +17,7 @@ test("custom colors round-trip through Google private metadata with a supported 
   assert.equal(readEventColor({ colorId: "11" }), "#d50000");
   assert.deepEqual(googleColorFields(undefined), {});
   assert.deepEqual(googleColorFields(null), {
-    colorId: null,
+    colorId: "0",
     extendedProperties: { private: { hypercalColor: null } },
   });
   assert.equal(

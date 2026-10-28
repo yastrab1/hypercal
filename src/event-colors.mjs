@@ -57,7 +57,7 @@ export function googleColorFields(color) {
       )
     : null;
   return {
-    colorId: nearest?.id || null,
+    colorId: nearest?.id || "0",
     extendedProperties: { private: { hypercalColor: color } },
   };
 }

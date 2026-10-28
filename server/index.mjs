@@ -1,3 +1,4 @@
+import { TagCache } from "./tag-cache.mjs";
 import { googleTagFields, tagKey, readEventTags } from "./tags.mjs";
 import { registerSharedViews } from "./shared-views.mjs";
 import { validNotification } from "../src/notifications.mjs";
@@ -32,6 +33,8 @@ import {
   allPages,
   normalizeEvent,
 } from "./google.mjs";
+const tagCache = new TagCache(resolve(dataDir, "tagged-events"));
+const tagRefreshes = new Map();
 const nativeAttempts = new Map();
 setInterval(() => {
   for (const [id, a] of nativeAttempts)
@@ -357,7 +360,8 @@ app.put("/api/tags", auth, (req, res) => {
   res.json(tags);
 });
 app.get("/api/tag-countdowns", auth, async (req, res) => {
-  const account = getAccount(req.session.accountId);
+  const id = req.session.accountId,
+    account = getAccount(id);
   const viewKey = z
     .string()
     .max(120)
@@ -368,82 +372,165 @@ app.get("/api/tag-countdowns", auth, async (req, res) => {
       .json({ error: "Choose one of your calendar views." });
   const trackedName = account.tagTracking?.[viewKey];
   const tags = (account.tags || []).filter((t) => t.name === trackedName);
-  if (!tags.length) return res.json({ next: {}, warnings: [] });
-  const calendars = (
-    await allPages(
-      req.session.accountId,
-      "users/me/calendarList?maxResults=250",
-    )
-  ).filter((c) => c.accessRole !== "freeBusyReader");
-  const from = new Date();
-  const next = Object.fromEntries(tags.map((t) => [t.name, null]));
-  const warnings = new Set();
-  const consider = (event) => {
-    if (new Date(event.end) <= from) return;
-    for (const name of event.tags || [])
-      if (
-        name in next &&
-        (!next[name] || new Date(event.start) < new Date(next[name].start))
-      )
-        next[name] = { start: event.start, title: event.title };
+  if (!tags.length)
+    return res.json({ next: {}, warnings: [], refreshing: false });
+  const refreshKey = JSON.stringify([id, trackedName]);
+  const state = tagRefreshes.get(refreshKey) || {
+    checkedAt: 0,
+    warnings: [],
+    running: false,
+    allowed: null,
   };
-  // Provider-side tag filtering avoids downloading entire school timetables.
-  const jobs = calendars.flatMap((c) =>
-    tags.map((t) => async () => {
-      const query = new URLSearchParams({
-        singleEvents: "true",
-        orderBy: "startTime",
-        maxResults: "1",
-        timeMin: from.toISOString(),
-        sharedExtendedProperty: `${tagKey(t.name)}=1`,
-      });
-      const result = await googleRequest(
-        req.session.accountId,
-        `calendars/${encodeURIComponent(c.id)}/events?${query}`,
-      );
-      for (const e of result.items || []) consider(normalizeEvent(e, c));
-    }),
-  );
-  const feedTo = new Date(from);
-  feedTo.setFullYear(feedTo.getFullYear() + 5);
-  for (const sub of account.subscriptions)
-    jobs.push(async () => {
-      let text = sub.cached;
-      if (
-        sub.kind !== "import" &&
-        (!text || Date.now() - (sub.refreshedAt || 0) > 5 * 60000)
-      ) {
-        text = await fetchCalendar(sub.url);
-        updateItem(req.session.accountId, "subscriptions", sub.id, {
-          cached: text,
-          refreshedAt: Date.now(),
-        });
-      }
-      if (!text) return;
-      for (const e of parseFeed(
-        text,
-        sub,
-        from.toISOString(),
-        feedTo.toISOString(),
-      ))
-        consider(e);
-    });
-  let cursor = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(4, jobs.length) }, async () => {
-      while (cursor < jobs.length) {
-        const job = jobs[cursor++];
-        try {
-          await job();
-        } catch {
-          warnings.add(
-            "Some calendars could not be checked for tag countdowns.",
-          );
+  if (!state.running && Date.now() - state.checkedAt > 60_000) {
+    state.running = true;
+    state.warnings = [];
+    tagRefreshes.set(refreshKey, state);
+    (async () => {
+      const warnings = new Set();
+      try {
+        const calendars = (
+          await allPages(id, "users/me/calendarList?maxResults=250")
+        ).filter((c) => c.accessRole !== "freeBusyReader");
+        state.allowed = [
+          ...calendars.map((c) => c.id),
+          ...account.subscriptions.map((c) => c.id),
+        ];
+        const from = new Date();
+        // Provider-side tag filtering avoids downloading entire school timetables.
+        const jobs = calendars.flatMap((c) =>
+          tags.map((t) => async () => {
+            const query = new URLSearchParams({
+              singleEvents: "true",
+              orderBy: "startTime",
+              maxResults: "1",
+              timeMin: from.toISOString(),
+              sharedExtendedProperty: `${tagKey(t.name)}=1`,
+            });
+            const result = await googleRequest(
+              req.session.accountId,
+              `calendars/${encodeURIComponent(c.id)}/events?${query}`,
+            );
+            tagCache.remember(
+              req.session.accountId,
+              (result.items || [])
+                .filter((e) => e.status !== "cancelled" && e.start && e.end)
+                .map((e) => normalizeEvent(e, c)),
+            );
+          }),
+        );
+        const feedTo = new Date(from);
+        feedTo.setFullYear(feedTo.getFullYear() + 5);
+        for (const sub of account.subscriptions)
+          jobs.push(async () => {
+            let text = sub.cached;
+            if (
+              sub.kind !== "import" &&
+              (!text || Date.now() - (sub.refreshedAt || 0) > 5 * 60000)
+            ) {
+              text = await fetchCalendar(sub.url);
+              updateItem(req.session.accountId, "subscriptions", sub.id, {
+                cached: text,
+                refreshedAt: Date.now(),
+              });
+            }
+            if (!text) return;
+            tagCache.remember(
+              id,
+              parseFeed(
+                text,
+                sub,
+                from.toISOString(),
+                feedTo.toISOString(),
+              ).filter((e) => e.tags?.includes(trackedName)),
+            );
+          });
+        let cursor = 0;
+        await Promise.all(
+          Array.from({ length: Math.min(4, jobs.length) }, async () => {
+            while (cursor < jobs.length) {
+              const job = jobs[cursor++];
+              try {
+                await job();
+              } catch {
+                warnings.add(
+                  "Some calendars could not be checked for tag countdowns.",
+                );
+              }
+            }
+          }),
+        );
+
+        // Independently revalidate saved candidates. Empty search results can lag,
+        // so they alone must never erase a locally confirmed tagged event.
+        const candidates = new Map();
+        for (const event of tagCache
+          .events(id)
+          .sort((a, b) => new Date(a.start) - new Date(b.start))) {
+          if (
+            new Date(event.end) <= new Date() ||
+            event.source !== "google" ||
+            !event.tags.includes(trackedName) ||
+            !state.allowed.includes(event.calendarId)
+          )
+            continue;
+          const list = candidates.get(event.calendarId) || [];
+          if (list.length < 2) list.push(event);
+          candidates.set(event.calendarId, list);
         }
+        for (const cached of [...candidates.values()]
+          .flat()
+          .filter(
+            (e) =>
+              e.source === "google" &&
+              e.tags.includes(trackedName) &&
+              state.allowed.includes(e.calendarId),
+          )) {
+          try {
+            const fresh = await googleRequest(
+              id,
+              `calendars/${encodeURIComponent(cached.calendarId)}/events/${encodeURIComponent(cached.id)}`,
+            );
+            if (fresh.status === "cancelled")
+              tagCache.remove(id, cached.calendarId, cached.id);
+            else
+              tagCache.remember(id, [
+                normalizeEvent(
+                  fresh,
+                  calendars.find((c) => c.id === cached.calendarId),
+                ),
+              ]);
+          } catch (error) {
+            const status = error.response?.status || error.status || error.code;
+            if (status === 404 || status === 410)
+              tagCache.remove(id, cached.calendarId, cached.id);
+            else
+              warnings.add("Some saved tagged events could not be refreshed.");
+          }
+        }
+      } catch {
+        warnings.add(
+          "Could not refresh tagged events. Showing saved events from disk.",
+        );
+      } finally {
+        state.warnings = [...warnings];
+        state.checkedAt = Date.now();
+        state.running = false;
       }
-    }),
-  );
-  res.json({ next, warnings: [...warnings] });
+    })();
+  }
+  const allowed = state.allowed || [
+    ...new Set(tagCache.events(id).map((e) => e.calendarId)),
+  ];
+  const nextEvent = tagCache.nearest(id, trackedName, allowed);
+  res.json({
+    next: {
+      [trackedName]: nextEvent
+        ? { start: nextEvent.start, end: nextEvent.end, title: nextEvent.title }
+        : null,
+    },
+    warnings: state.warnings,
+    refreshing: state.running,
+  });
 });
 app.get("/api/calendars", auth, async (req, res) => {
   const items = await allPages(
@@ -519,7 +606,15 @@ app.get("/api/events", auth, async (req, res) => {
             `${sub.name}: feed refresh failed${text ? ", showing last saved copy" : ""}.`,
           );
         }
-        return text ? parseFeed(text, sub, from, to) : [];
+        return text
+          ? tagCache.range(
+              id,
+              calendarId,
+              from,
+              to,
+              parseFeed(text, sub, from, to),
+            )
+          : [];
       }
       const c = available.find((c) => c.id === calendarId);
       if (!c) return [];
@@ -527,9 +622,15 @@ app.get("/api/events", auth, async (req, res) => {
         id,
         `calendars/${encodeURIComponent(calendarId)}/events?singleEvents=true&orderBy=startTime&maxResults=2500&timeMin=${encodeURIComponent(from)}&timeMax=${encodeURIComponent(to)}`,
       );
-      return items
-        .filter((e) => e.status !== "cancelled" && e.start && e.end)
-        .map((e) => normalizeEvent(e, c));
+      return tagCache.range(
+        id,
+        calendarId,
+        from,
+        to,
+        items
+          .filter((e) => e.status !== "cancelled" && e.start && e.end)
+          .map((e) => normalizeEvent(e, c)),
+      );
     }),
   );
   results.forEach((r, i) =>
@@ -647,6 +748,14 @@ app.post("/api/events", auth, async (req, res) => {
     `calendars/${encodeURIComponent(e.calendarId)}/events`,
     { method: "POST", body: eventBody(e) },
   );
+  for (const [key, state] of tagRefreshes)
+    if (key.startsWith(JSON.stringify([req.session.accountId]).slice(0, -1)))
+      state.checkedAt = 0;
+  tagCache.remember(
+    req.session.accountId,
+    [normalizeEvent(result, { id: e.calendarId, accessRole: "writer" })],
+    { local: true },
+  );
   res.status(201).json(result);
 });
 app.post("/api/events/:id/copy", auth, async (req, res) => {
@@ -684,6 +793,11 @@ app.post("/api/events/:id/copy", auth, async (req, res) => {
     `calendars/${encodeURIComponent(destinationCalendarId)}/events`,
     { method: "POST", body: copiedEventBody(source) },
   );
+  tagCache.remember(
+    req.session.accountId,
+    [normalizeEvent(copied, destination)],
+    { local: true },
+  );
   res.status(201).json(normalizeEvent(copied, destination));
 });
 app.patch("/api/events/:id", auth, async (req, res) => {
@@ -709,6 +823,14 @@ app.patch("/api/events/:id", auth, async (req, res) => {
       etag: e.etag,
     },
   );
+  for (const [key, state] of tagRefreshes)
+    if (key.startsWith(JSON.stringify([req.session.accountId]).slice(0, -1)))
+      state.checkedAt = 0;
+  tagCache.remember(
+    req.session.accountId,
+    [normalizeEvent(result, { id: e.calendarId, accessRole: "writer" })],
+    { local: true },
+  );
   res.json(result);
 });
 app.delete("/api/events/:id", auth, async (req, res) => {
@@ -720,6 +842,7 @@ app.delete("/api/events/:id", auth, async (req, res) => {
     `calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(req.params.id)}`,
     { method: "DELETE", etag },
   );
+  tagCache.remove(req.session.accountId, calendarId, req.params.id);
   res.json({ ok: true });
 });
 const viewSchema = z.object({

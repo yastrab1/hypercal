@@ -181,27 +181,37 @@ export function TagCountdowns({
     if (!live || !canWrite || !trackedTag) return;
     let cancelled = false;
     setStatus("Updating tag countdowns");
-    api<{ next: typeof next; warnings: string[] }>(
-      `/tag-countdowns?view=${encodeURIComponent(viewKey)}`,
-      {
-        signal: AbortSignal.timeout(60000),
-      },
-    )
-      .then((result) => {
-        if (cancelled) return;
-        setNext(result.next);
-        setStatus(result.warnings.join(" "));
-        localStorage.setItem(
-          `hypercal.countdowns.${accountKey}.${viewKey}`,
-          JSON.stringify(result.next),
-        );
-      })
-      .catch(() => {
-        if (!cancelled)
-          setStatus("Could not refresh tag countdowns. Showing saved values.");
-      });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = () =>
+      api<{ next: typeof next; warnings: string[]; refreshing: boolean }>(
+        `/tag-countdowns?view=${encodeURIComponent(viewKey)}`,
+        { signal: AbortSignal.timeout(20000) },
+      )
+        .then((result) => {
+          if (cancelled) return;
+          setNext(result.next);
+          setStatus(
+            result.warnings.join(" ") ||
+              (result.refreshing
+                ? "Refreshing tagged events in the background"
+                : ""),
+          );
+          localStorage.setItem(
+            `hypercal.countdowns.${accountKey}.${viewKey}`,
+            JSON.stringify(result.next),
+          );
+          if (result.refreshing) timer = setTimeout(load, 1500);
+        })
+        .catch(() => {
+          if (!cancelled)
+            setStatus(
+              "Could not refresh tag countdowns. Showing saved values.",
+            );
+        });
+    load();
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, [
     live,

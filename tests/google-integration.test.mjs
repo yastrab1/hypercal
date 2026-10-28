@@ -50,6 +50,8 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     const path = new URL(options.url).pathname;
     const method = options.method;
     const body = options.data;
+    if (["POST", "PATCH"].includes(method) && body?.colorId === null)
+      throw Object.assign(new Error("Required"), { status: 400 });
     if (path === "/calendar/v3/calendars" && method === "POST") {
       assert.equal(body.summary, "Created without a URL");
       return { data: { id: "created-calendar", summary: body.summary } };
@@ -61,11 +63,14 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       );
       return {
         data: {
-          items: upstream.map((e) => ({
-            ...e,
-            start: { date: "2027-01-20" },
-            end: { date: "2027-01-21" },
-          })),
+          items:
+            path === "/calendar/v3/calendars/primary/events"
+              ? upstream.map((e) => ({
+                  ...e,
+                  start: { date: "2027-01-20" },
+                  end: { date: "2027-01-21" },
+                }))
+              : [],
         },
       };
     }
@@ -241,8 +246,8 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       title: "HyperCal writes upstream",
       description: "",
       location: "Room B",
-      start: "2026-10-28T10:00:00Z",
-      end: "2026-10-28T11:00:00Z",
+      start: "2027-01-20T10:00:00Z",
+      end: "2027-01-20T11:00:00Z",
       allDay: false,
       timeZone: "Europe/Bratislava",
       reminderMinutes: 120,
@@ -261,10 +266,16 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       JSON.parse(upstream[0].extendedProperties.shared.hypercalTags),
       ["Exam"],
     );
-    const countdowns = await (
-      await fetch(`${origin}/api/tag-countdowns`, { headers: alice })
-    ).json();
-    assert.equal(countdowns.next.Exam.start, "2027-01-20");
+    let countdowns;
+    for (let i = 0; i < 100; i++) {
+      countdowns = await (
+        await fetch(`${origin}/api/tag-countdowns`, { headers: alice })
+      ).json();
+      if (!countdowns.refreshing) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(countdowns.refreshing, false);
+    assert.match(countdowns.next.Exam.start, /^2027-01-20/);
     assert.deepEqual(countdowns.warnings, []);
     assert.equal(
       upstream[0].extendedProperties.private.hypercalColor,
@@ -348,7 +359,7 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     assert.equal(edited.status, 200);
     await edited.json();
     assert.equal(upstream[0].summary, "Edited in HyperCal");
-    assert.equal(upstream[0].colorId, null);
+    assert.equal(upstream[0].colorId, "0");
     assert.equal(upstream[0].extendedProperties.shared.hypercalTags, "[]");
     assert(
       Object.entries(upstream[0].extendedProperties.shared).some(
