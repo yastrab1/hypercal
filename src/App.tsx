@@ -1,3 +1,4 @@
+import { shiftPeriod } from "./period.mjs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   addDays,
@@ -191,6 +192,7 @@ export default function App() {
     (cachedStart?.calendars || demoCalendars).map((c) => c.id),
   );
   const [date, setDate] = useState(new Date());
+  const [periodPreview, setPeriodPreview] = useState(false);
   const [layout, setLayout] = useState<Layout>(() =>
     stored<Layout>(
       "hypercal.layout",
@@ -236,9 +238,7 @@ export default function App() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [lastSync, setLastSync] = useState(
-    cachedStart ? new Date(cachedStart.updatedAt).toISOString() : "",
-  );
+
   const [search, setSearch] = useState("");
   const [sidebar, setSidebar] = useState(false);
   const [shortcuts, setShortcuts] = useState(() =>
@@ -420,7 +420,6 @@ export default function App() {
             : getDefaultView(demoViews, currentLayout.current)?.id || null;
         });
         setUsingCache(false);
-        setLastSync("");
       } else {
         setMetadataRefresh((n) => n + 1);
         setRefresh((n) => n + 1);
@@ -501,7 +500,7 @@ export default function App() {
     const saved = calendarCache.readRange(accountId, rangeKey);
     if (saved) {
       setEvents(saved.events);
-      setLastSync(saved.refreshedAt);
+
       setUsingCache(true);
     }
     if (!verified || !online) return;
@@ -519,7 +518,7 @@ export default function App() {
         if (seq !== generation.current) return;
         setEvents(data.events);
         setWarnings(data.warnings);
-        setLastSync(data.refreshedAt);
+
         setUsingCache(false);
         setSyncFailed(false);
         calendarCache.writeRange(
@@ -596,13 +595,7 @@ export default function App() {
     (step: number) => {
       setPreview(null);
       setExpandedDay(null);
-      setDate((d) =>
-        layout === "year"
-          ? addYears(d, step)
-          : layout === "month"
-            ? addMonths(d, step)
-            : addDays(d, layout === "week" ? step * 7 : step),
-      );
+      setDate((d) => shiftPeriod(d, layout, step));
     },
     [layout],
   );
@@ -610,6 +603,7 @@ export default function App() {
     surfaceRef,
     !desktop && !sidebar && !panel && !preview && !expandedDay,
     move,
+    setPeriodPreview,
   );
   const openCreate = (d = new Date()) => {
     setPreview(null);
@@ -824,6 +818,7 @@ export default function App() {
             end: source.end,
             allDay: source.allDay,
             timeZone: source.timeZone,
+            color: source.color,
             reminderMinutes: source.reminderMinutes,
           }),
         });
@@ -839,11 +834,11 @@ export default function App() {
       throw new Error("Connect and sync before saving a view.");
     if (live) {
       const saved = await api<SavedView>(
-        editingView ? `/views/${v.id}` : "/views",
-        { method: editingView ? "PATCH" : "POST", body: JSON.stringify(v) },
+        editingView?.id ? `/views/${v.id}` : "/views",
+        { method: editingView?.id ? "PATCH" : "POST", body: JSON.stringify(v) },
       );
       setViews((vs) => {
-        const next = editingView
+        const next = editingView?.id
           ? vs.map((x) => (x.id === v.id ? saved : x))
           : [...vs, saved];
         return saved.isDefault
@@ -852,9 +847,9 @@ export default function App() {
       });
       chooseView(saved);
     } else {
-      const saved = { ...v, id: editingView ? v.id : crypto.randomUUID() };
+      const saved = { ...v, id: editingView?.id ? v.id : crypto.randomUUID() };
       setViews((vs) => {
-        const next = editingView
+        const next = editingView?.id
           ? vs.map((x) => (x.id === v.id ? saved : x))
           : [...vs, saved];
         return saved.isDefault
@@ -999,24 +994,6 @@ export default function App() {
         >
           <X size={22} />
         </button>
-        <nav className="drawer-layouts" aria-label="Calendar layouts">
-          {layouts.map((l) => {
-            const Icon = layoutIcons[l];
-            return (
-              <button
-                key={l}
-                className={layout === l ? "selected" : ""}
-                onClick={() => {
-                  changeLayout(l);
-                  setSidebar(false);
-                }}
-              >
-                <Icon size={22} />
-                <span>{labels[l]}</span>
-              </button>
-            );
-          })}
-        </nav>
         <button
           className="create-button"
           onClick={() => openCreate(new Date(date))}
@@ -1097,7 +1074,7 @@ export default function App() {
         </section>
         <nav className="views-nav">
           <div className="section-label">
-            <span>MY VIEWS</span>
+            <span>VIEWS</span>
             <button
               className="icon-button web-only"
               aria-label="Create custom view"
@@ -1109,38 +1086,77 @@ export default function App() {
               <Plus size={16} />
             </button>
           </div>
-          <button
-            className={`view-link ${!activeView ? "active" : ""}`}
-            onClick={() => {
-              setActiveView(null);
-              setSidebar(false);
-            }}
-          >
-            <CalendarDays size={17} />
-            <span>All calendars</span>
-          </button>
-          {views.map((v, i) => (
-            <div
-              className={`view-item ${activeView === v.id ? "active" : ""}`}
-              key={v.id}
-            >
-              <button className="view-link" onClick={() => chooseView(v)}>
-                <SlidersHorizontal size={16} />
-                <span>{v.name}</span>
-                <kbd>{i < 9 ? i + 1 : ""}</kbd>
-              </button>
-              <button
-                className="view-edit web-only"
-                aria-label={`Edit ${v.name}`}
-                onClick={() => {
-                  setEditingView(v);
-                  setPanel("view");
-                }}
+          {layouts.map((l) => {
+            const replacement = getDefaultView(views, l);
+            const Icon = layoutIcons[l];
+            const selected =
+              layout === l && activeView === (replacement?.id || null);
+            return (
+              <div className={`view-item ${selected ? "active" : ""}`} key={l}>
+                <button
+                  className="view-link"
+                  onClick={() => {
+                    if (replacement) chooseView(replacement);
+                    else {
+                      changeLayout(l);
+                      setSidebar(false);
+                    }
+                  }}
+                >
+                  <Icon size={18} />
+                  <span>{replacement?.name || labels[l]}</span>
+                  {replacement && (
+                    <small className="view-layout-label">{labels[l]}</small>
+                  )}
+                </button>
+                <button
+                  className="view-edit web-only"
+                  aria-label={`Customize ${labels[l]} view`}
+                  onClick={() => {
+                    setEditingView(
+                      replacement || {
+                        id: "",
+                        name: labels[l],
+                        layout: l,
+                        calendarIds: calendars.map((c) => c.id),
+                        include: "",
+                        exclude: "",
+                        hideAllDay: false,
+                        isDefault: true,
+                      },
+                    );
+                    setPanel("view");
+                  }}
+                >
+                  <Pencil size={13} />
+                </button>
+              </div>
+            );
+          })}
+          {views
+            .filter((v) => !v.isDefault)
+            .map((v) => (
+              <div
+                className={`view-item ${activeView === v.id ? "active" : ""}`}
+                key={v.id}
               >
-                <Pencil size={13} />
-              </button>
-            </div>
-          ))}
+                <button className="view-link" onClick={() => chooseView(v)}>
+                  <SlidersHorizontal size={16} />
+                  <span>{v.name}</span>
+                  <kbd>{views.indexOf(v) < 9 ? views.indexOf(v) + 1 : ""}</kbd>
+                </button>
+                <button
+                  className="view-edit web-only"
+                  aria-label={`Edit ${v.name}`}
+                  onClick={() => {
+                    setEditingView(v);
+                    setPanel("view");
+                  }}
+                >
+                  <Pencil size={13} />
+                </button>
+              </div>
+            ))}
         </nav>
         <section className="calendar-list">
           <div className="section-label">
@@ -1440,22 +1456,46 @@ export default function App() {
           <span>{filtered.length} events</span>
         </div>
         <div ref={surfaceRef} className="calendar-surface" aria-busy={busy}>
-          <CalendarCanvas
-            layout={layout}
-            date={date}
-            events={filtered}
-            calendars={calendars}
-            onEvent={(e, anchor) => setPreview({ event: e, anchor })}
-            onExpandDay={(d, anchor) => {
-              setPreview(null);
-              setExpandedDay({ date: d, anchor });
-            }}
-            onCreate={openCreate}
-            onDate={(d, l) => {
-              setDate(d);
-              if (l) changeLayout(l);
-            }}
-          />
+          <div className="period-track">
+            {periodPreview &&
+              [-1, 1].map((step) => (
+                <div
+                  key={step}
+                  inert
+                  aria-hidden="true"
+                  className={`period-page period-adjacent ${step < 0 ? "period-before" : "period-after"}`}
+                >
+                  <CalendarCanvas
+                    layout={layout}
+                    date={shiftPeriod(date, layout, step)}
+                    events={filtered}
+                    calendars={calendars}
+                    onEvent={() => {}}
+                    onExpandDay={() => {}}
+                    onCreate={() => {}}
+                    onDate={() => {}}
+                  />
+                </div>
+              ))}
+            <div className="period-page period-current">
+              <CalendarCanvas
+                layout={layout}
+                date={date}
+                events={filtered}
+                calendars={calendars}
+                onEvent={(e, anchor) => setPreview({ event: e, anchor })}
+                onExpandDay={(d, anchor) => {
+                  setPreview(null);
+                  setExpandedDay({ date: d, anchor });
+                }}
+                onCreate={openCreate}
+                onDate={(d, l) => {
+                  setDate(d);
+                  if (l) changeLayout(l);
+                }}
+              />
+            </div>
+          </div>
           {!busy && filtered.length === 0 && (
             <div className="empty-note">
               {search
@@ -1473,22 +1513,6 @@ export default function App() {
         >
           <Plus size={29} />
         </button>
-        <footer className="workspace-footer">
-          <span>
-            <span className="status-dot" />
-            {live
-              ? lastSync
-                ? `${usingCache ? (!online ? "Offline · saved" : "Saved") : "Updated"} ${format(new Date(lastSync), usingCache ? "MMM d, HH:mm" : "HH:mm")} · ${busy ? "syncing…" : "sync on open"}`
-                : "Loading Google calendars…"
-              : "Sample data · changes stay in this browser"}
-          </span>
-          <button onClick={() => setPanel("shortcuts")}>
-            <kbd>?</kbd> Shortcuts
-          </button>
-          <span className="footer-zone">
-            {Intl.DateTimeFormat().resolvedOptions().timeZone}
-          </span>
-        </footer>
       </main>
       {expandedDay && (
         <DayOverflowPopover
@@ -1556,7 +1580,13 @@ export default function App() {
       )}
       {panel === "view" && canEditViews && (
         <Panel
-          title={editingView ? "Edit custom view" : "Create a custom view"}
+          title={
+            editingView?.id
+              ? "Edit view"
+              : editingView?.isDefault
+                ? `Customize ${labels[editingView.layout]} view`
+                : "Create a custom view"
+          }
           onClose={close}
         >
           <ViewEditor
@@ -1965,7 +1995,7 @@ function ViewEditor({
           <Check size={16} />
           Save view
         </button>
-        {view && (
+        {view?.id && (
           <button
             type="button"
             className="danger-button"

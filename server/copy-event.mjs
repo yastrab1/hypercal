@@ -9,6 +9,7 @@ export function copiedEventBody(source) {
   }
   const body = {};
   for (const key of [
+    "colorId",
     "summary",
     "description",
     "location",
@@ -20,5 +21,11 @@ export function copiedEventBody(source) {
   ]) {
     if (source[key] !== undefined) body[key] = structuredClone(source[key]);
   }
+  if (source.extendedProperties?.private?.hypercalColor)
+    body.extendedProperties = {
+      private: {
+        hypercalColor: source.extendedProperties.private.hypercalColor,
+      },
+    };
   return body;
 }

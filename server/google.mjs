@@ -1,3 +1,4 @@
+import { readEventColor } from "../src/event-colors.mjs";
 import { OAuth2Client } from "google-auth-library";
 import { readFileSync } from "node:fs";
 import { getAccount, upsertAccount } from "./store.mjs";
@@ -80,6 +81,7 @@ export function normalizeEvent(e, calendar) {
     readOnly: !["owner", "writer"].includes(calendar.accessRole),
     source: "google",
     timeZone: e.start?.timeZone,
+    color: readEventColor(e),
     reminderMinutes: e.reminders?.useDefault
       ? undefined
       : (e.reminders?.overrides?.find((x) => x.method === "popup")?.minutes ??

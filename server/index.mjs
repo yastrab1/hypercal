@@ -1,3 +1,4 @@
+import { googleColorFields } from "../src/event-colors.mjs";
 import "dotenv/config";
 import express from "express";
 import session from "express-session";
@@ -357,6 +358,11 @@ const eventSchema = z
     end: z.string(),
     allDay: z.boolean(),
     etag: z.string().optional(),
+    color: z
+      .string()
+      .regex(/^#[\da-f]{6}$/i)
+      .nullable()
+      .optional(),
     recurrence: z.enum(["none", "daily", "weekly", "monthly"]).optional(),
     timeZone: z
       .string()
@@ -401,6 +407,7 @@ function eventBody(e) {
         },
       };
   return {
+    ...googleColorFields(e.color),
     summary: e.title,
     description: e.description,
     location: e.location,
@@ -458,12 +465,10 @@ app.post("/api/events/:id/copy", auth, async (req, res) => {
     `calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(req.params.id)}`,
   );
   if (etag && source.etag !== etag)
-    return res
-      .status(412)
-      .json({
-        error:
-          "This event changed in Google Calendar. Refresh before copying again.",
-      });
+    return res.status(412).json({
+      error:
+        "This event changed in Google Calendar. Refresh before copying again.",
+    });
   const copied = await googleRequest(
     req.session.accountId,
     `calendars/${encodeURIComponent(destinationCalendarId)}/events`,

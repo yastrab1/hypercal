@@ -1,3 +1,4 @@
+import { eventColor } from "./event-colors.mjs";
 import { useEffect, useRef, useState } from "react";
 import {
   addDays,
@@ -55,8 +56,7 @@ export function CalendarCanvas({
   useEffect(() => {
     if (scroll.current) scroll.current.scrollTop = 7 * 64;
   }, [layout]);
-  const color = (e: CalendarEvent) =>
-    calendars.find((c) => c.id === e.calendarId)?.color || "#6860d9";
+  const color = (e: CalendarEvent) => eventColor(e, calendars);
   const eventButton = (e: CalendarEvent, compact = false) => (
     <button
       key={`${e.calendarId}:${e.id}`}
@@ -288,7 +288,7 @@ export function CalendarCanvas({
         );
   return (
     <div
-      className="time-calendar"
+      className={`time-calendar time-${layout}`}
       style={{ "--days": days.length } as React.CSSProperties}
     >
       <div className="day-heading">

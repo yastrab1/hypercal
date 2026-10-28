@@ -1,3 +1,4 @@
+import { eventColor } from "./event-colors.mjs";
 import {
   useEffect,
   useLayoutEffect,
@@ -231,7 +232,7 @@ export function EventPopover({
         </button>
       </div>
       <div className="preview-heading">
-        <i style={{ background: calendar?.color }} />
+        <i style={{ background: eventColor(event, calendars) }} />
         <div>
           <h2>{event.title}</h2>
           <p>
@@ -446,9 +447,7 @@ export function DayOverflowPopover({
             className={`expanded-event ${event.allDay ? "expanded-all-day" : ""}`}
             style={
               {
-                "--event-color":
-                  calendars.find((c) => c.id === event.calendarId)?.color ||
-                  "#039be5",
+                "--event-color": eventColor(event, calendars),
               } as React.CSSProperties
             }
             onClick={(e) => onEvent(event, e.currentTarget)}

@@ -53,7 +53,7 @@ jobs:
           fi
       - name: Build Android APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --console=plain
+        run: ./gradlew assembleDebug :app:assembleDebugAndroidTest --no-daemon --console=plain
       - name: Package APK and checksum
         run: npm run android:package
       - uses: actions/upload-artifact@v7.0.2

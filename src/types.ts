@@ -18,6 +18,7 @@ export interface CalendarEvent {
   allDay: boolean;
   readOnly: boolean;
   source: "google" | "ical" | "demo";
+  color?: string | null;
   timeZone?: string;
   reminderMinutes?: number | null;
   useDefaultReminders?: boolean;

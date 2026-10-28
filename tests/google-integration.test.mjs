@@ -141,6 +141,7 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       allDay: false,
       timeZone: "Europe/Bratislava",
       reminderMinutes: 10,
+      color: "#18ab72",
     };
     const created = await fetch(`${origin}/api/events`, {
       method: "POST",
@@ -151,6 +152,10 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     assert.equal(created.status, 201);
     await created.json();
     assert.equal(upstream[0].summary, draft.title);
+    assert.equal(
+      upstream[0].extendedProperties.private.hypercalColor,
+      draft.color,
+    );
     assert.equal(upstream[0].start.timeZone, "Europe/Bratislava");
     assert.deepEqual(upstream[0].reminders, {
       useDefault: false,
@@ -166,6 +171,7 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       await fetch(`${origin}/api/events?${q}`, { headers: alice })
     ).json();
     assert.equal(fromGoogle.events[0].title, "Changed from Google Calendar");
+    assert.equal(fromGoogle.events[0].color, draft.color);
     assert.equal(fromGoogle.events[0].etag, '"v1"');
     upstream[0].recurringEventId = "series1";
     upstream[0].attendees = [{ email: "friend@example.test" }];
@@ -185,6 +191,7 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     const copied = await copy.json();
     assert.equal(copied.calendarId, "target");
     assert.equal(copied.id, "copy1");
+    assert.equal(copied.color, draft.color);
     assert.equal(copied.title, "Changed from Google Calendar");
     assert.equal(copies[0].attendees, undefined);
     assert.equal(copies[0].recurringEventId, undefined);
@@ -217,12 +224,15 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
         ...draft,
         title: "Edited in HyperCal",
         useDefaultReminders: true,
+        color: null,
         etag: '"v1"',
       }),
     });
     assert.equal(edited.status, 200);
     await edited.json();
     assert.equal(upstream[0].summary, "Edited in HyperCal");
+    assert.equal(upstream[0].colorId, null);
+    assert.equal(upstream[0].extendedProperties.private.hypercalColor, null);
     assert.deepEqual(upstream[0].reminders, { useDefault: true });
     const view = await fetch(`${origin}/api/views`, {
       method: "POST",

@@ -12,9 +12,9 @@ Google Calendar remains the source of truth. HyperCal writes event changes direc
 ## Features
 
 - Day, week, month and year layouts, connected multi-day event bars, and expandable event lists for busy days.
-- Event detail popups with inline deletion confirmation and copying to another writable calendar, with a separate editor for changes. Copies leave the source unchanged and copy only the selected occurrence, without inviting guests. Create, edit and delete events, set locations, descriptions, notifications and repeating events.
-- Saved views that filter calendars and event text. Choose a default for each layout on the web; those choices also apply on Android. Clicking a date opens the default day view.
-- Light, dark and system themes. Compact mobile calendar, swipe navigation and a swipeable drawer containing your account, layouts and views.
+- Event detail popups with inline deletion confirmation and copying to another writable calendar, with a separate editor for changes. Copies leave the source unchanged and copy only the selected occurrence, without inviting guests. Create, edit and delete events, set locations, descriptions, notifications, custom event colors and repeating events. Custom colors keep their exact hex value in private Google event metadata; Google Calendar uses the nearest supported event color.
+- Saved views that filter calendars and event text. Built-in and custom views share one sidebar list. Replace each layout’s default with your own filtered view on the web; those choices also apply on Android. Clicking a date opens the default day view.
+- Light, dark and system themes. Compact mobile calendar, animated swipe navigation, a week grid that fits the screen width, and a swipeable drawer containing your account and views. Android uses an immersive window with no sync footer.
 - Command palette and keyboard shortcuts. Arrow keys move by the displayed period; shortcuts pause while typing.
 - Public iCalendar URL subscriptions, `webcal://` links and `.ics` snapshot imports, with recurrence support. Imported/subscribed calendars are read-only within HyperCal.
 - Read-only offline caching of recently visited ranges. Sync runs on launch, resume, reconnect and every minute while visible; a small top indicator reports progress. Offline changes are not queued.
@@ -104,6 +104,14 @@ Outputs:
 - `android/app/build/outputs/apk/debug/app-debug.apk`
 - `artifacts/HyperCal-debug.apk`
 - `dist/downloads/hypercal-debug.apk` and its SHA-256 checksum
+
+With an emulator or test device connected, run the native fullscreen regression test (launch, resume, native window bounds and CSS viewport bounds):
+
+```sh
+npm run android:sync
+cd android
+./gradlew :app:connectedDebugAndroidTest
+```
 
 The backend also serves the packaged APK at `/downloads/hypercal-debug.apk`. Build packaging runs after Capacitor sync so the APK is not recursively bundled into itself.
 

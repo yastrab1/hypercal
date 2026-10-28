@@ -1,3 +1,4 @@
+import { eventColors } from "./event-colors.mjs";
 import { useEffect, useRef, useState } from "react";
 import { addDays, format } from "date-fns";
 import {
@@ -9,6 +10,7 @@ import {
   Globe,
   LoaderCircle,
   MapPin,
+  Palette,
   Repeat2,
   Trash2,
   X,
@@ -36,6 +38,7 @@ export function EventEditor({
   onDelete: (e: CalendarEvent) => Promise<void>;
   onClose: () => void;
 }) {
+  const [color, setColor] = useState(event?.color || "");
   const [allDay, setAllDay] = useState(event?.allDay || false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -103,6 +106,7 @@ export function EventEditor({
           start: s,
           end: t,
           allDay,
+          color: color || null,
           readOnly: false,
           source: live ? "google" : "demo",
           etag: event?.etag,
@@ -305,6 +309,64 @@ export function EventEditor({
               placeholder="Add location or meeting link"
               defaultValue={event?.location}
               maxLength={1024}
+            />
+          </label>
+        </div>
+        <div className="event-editor-section event-color-section">
+          <div className="event-detail-row">
+            <Palette size={20} />
+            <span>Event color</span>
+          </div>
+          <div
+            className="event-color-options"
+            role="group"
+            aria-label="Event color"
+          >
+            <button
+              type="button"
+              className="color-default"
+              aria-pressed={!color}
+              onClick={() => setColor("")}
+            >
+              Calendar default
+            </button>
+            {eventColors.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className="color-swatch"
+                style={{ background: c.hex }}
+                aria-label={c.name}
+                title={c.name}
+                aria-pressed={color.toLowerCase() === c.hex}
+                onClick={() => setColor(c.hex)}
+              >
+                {color.toLowerCase() === c.hex && <Check size={17} />}
+              </button>
+            ))}
+          </div>
+          <label className="custom-event-color">
+            Custom color
+            <input
+              type="color"
+              aria-label="Custom event color"
+              value={
+                /^#[\da-f]{6}$/i.test(color)
+                  ? color
+                  : calendar?.color || "#039be5"
+              }
+              onChange={(e) => setColor(e.target.value)}
+              onInput={(e) => setColor(e.currentTarget.value)}
+            />
+            <input
+              className="color-hex"
+              type="text"
+              aria-label="Custom color hex"
+              pattern="#[0-9a-fA-F]{6}"
+              placeholder="#039be5"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              maxLength={7}
             />
           </label>
         </div>
