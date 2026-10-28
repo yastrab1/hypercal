@@ -17,20 +17,22 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       HYPERCAL_ANDROID_URL: ${{ vars.HYPERCAL_ANDROID_URL }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '22'
           cache: npm
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4.0.4
+        with:
+          packages: platform-tools
       - name: Install Android SDK
         run: sdkmanager 'platforms;android-36' 'build-tools;36.1.0'
       - name: Install dependencies
@@ -54,14 +56,14 @@ jobs:
         run: ./gradlew assembleDebug --no-daemon --console=plain
       - name: Package APK and checksum
         run: npm run android:package
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: hypercal-android
           path: |
             dist/downloads/hypercal-debug.apk
             dist/downloads/hypercal-debug.apk.sha256
           retention-days: 30
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: hypercal-web
           path: dist/
@@ -69,11 +71,11 @@ jobs:
   publish:
     needs: build
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: hypercal-android
           path: release/
