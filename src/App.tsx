@@ -1529,7 +1529,7 @@ export default function App() {
             tags={tags}
             events={events}
             live={live}
-            canWrite={canWrite}
+            canRead={verified && online}
             accountKey={tagAccount}
             refresh={refresh}
             trackedTag={trackedTag}

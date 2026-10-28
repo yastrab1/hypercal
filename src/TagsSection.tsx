@@ -146,7 +146,7 @@ export function TagCountdowns({
   tags,
   events,
   live,
-  canWrite,
+  canRead,
   accountKey,
   refresh,
   trackedTag,
@@ -155,7 +155,7 @@ export function TagCountdowns({
   tags: Tag[];
   events: CalendarEvent[];
   live: boolean;
-  canWrite: boolean;
+  canRead: boolean;
   accountKey: string;
   refresh: number;
   trackedTag: string | null;
@@ -178,7 +178,7 @@ export function TagCountdowns({
     } catch {}
   }, [accountKey, viewKey]);
   useEffect(() => {
-    if (!live || !canWrite || !trackedTag) return;
+    if (!live || !canRead || !trackedTag) return;
     let cancelled = false;
     setStatus("Updating tag countdowns");
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -215,7 +215,7 @@ export function TagCountdowns({
     };
   }, [
     live,
-    canWrite,
+    canRead,
     accountKey,
     JSON.stringify(tags),
     refresh,
