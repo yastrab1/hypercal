@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">HyperCal</string>
+    <string name="title_activity_main">HyperCal</string>
+    <string name="package_name">app.hypercal.calendar</string>
+    <string name="custom_url_scheme">app.hypercal.calendar</string>
+</resources>

@@ -1,0 +1,18 @@
+[Unit]
+Description=HyperCal calendar interface
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/hypercal
+ExecStart=/usr/bin/node server/index.mjs
+Restart=on-failure
+RestartSec=4
+Environment=NODE_ENV=production
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
