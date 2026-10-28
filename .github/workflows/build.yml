@@ -58,7 +58,8 @@ jobs:
             printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/hypercal-signing/debug.keystore"
             chmod 600 "$RUNNER_TEMP/hypercal-signing/debug.keystore"
             fingerprint=$(keytool -exportcert -keystore "$RUNNER_TEMP/hypercal-signing/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d" " -f1)
-            test "$fingerprint" = c16f4c95c2d012620f845c8efac2e190497e3e85a8fba0035b21677528594793
+            echo "Android signing certificate SHA-256: $fingerprint"
+            test "$fingerprint" = 95862b39de93e848513408a4ed651574dc7af4b298ed163239a9cbf3e7408950
             echo "HYPERCAL_DEBUG_KEYSTORE=$RUNNER_TEMP/hypercal-signing/debug.keystore" >> "$GITHUB_ENV"
           fi
       - name: Build Android APK
