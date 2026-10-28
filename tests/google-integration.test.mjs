@@ -41,6 +41,7 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
   };
   await writeFile(join(dir, "accounts.json"), JSON.stringify(accounts));
   const upstream = [];
+  const copies = [];
   let rejectPatch = false;
   const originalRequest = OAuth2Client.prototype.request;
   // Exercise the entire HTTP API while replacing only the external provider boundary.
@@ -60,6 +61,8 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
               accessRole: "owner",
               primary: true,
             },
+            { id: "target", summary: "Projects", accessRole: "writer" },
+            { id: "readonly", summary: "Holidays", accessRole: "reader" },
           ],
         },
       };
@@ -69,6 +72,15 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       const event = { ...body, id: "event1", etag: '"v1"' };
       upstream.push(event);
       return { data: structuredClone(event) };
+    }
+    if (
+      path === "/calendar/v3/calendars/primary/events/event1" &&
+      method === "GET"
+    )
+      return { data: structuredClone(upstream[0]) };
+    if (path === "/calendar/v3/calendars/target/events" && method === "POST") {
+      copies.push(structuredClone(body));
+      return { data: { ...body, id: "copy1", etag: '"copy-v1"' } };
     }
     if (
       path === "/calendar/v3/calendars/primary/events/event1" &&
@@ -155,6 +167,40 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     ).json();
     assert.equal(fromGoogle.events[0].title, "Changed from Google Calendar");
     assert.equal(fromGoogle.events[0].etag, '"v1"');
+    upstream[0].recurringEventId = "series1";
+    upstream[0].attendees = [{ email: "friend@example.test" }];
+    async function copyTo(destinationCalendarId, etag = '"v1"') {
+      return fetch(`${origin}/api/events/event1/copy`, {
+        method: "POST",
+        headers: alice,
+        body: JSON.stringify({
+          calendarId: "primary",
+          destinationCalendarId,
+          etag,
+        }),
+      });
+    }
+    const copy = await copyTo("target");
+    assert.equal(copy.status, 201);
+    const copied = await copy.json();
+    assert.equal(copied.calendarId, "target");
+    assert.equal(copied.id, "copy1");
+    assert.equal(copied.title, "Changed from Google Calendar");
+    assert.equal(copies[0].attendees, undefined);
+    assert.equal(copies[0].recurringEventId, undefined);
+    assert.equal(upstream.length, 1);
+    assert.equal(upstream[0].id, "event1");
+    for (const [destination, etag, status] of [
+      ["primary", '\"v1\"', 400],
+      ["readonly", '\"v1\"', 403],
+      ["missing", '\"v1\"', 403],
+      ["target", '\"stale\"', 412],
+    ]) {
+      const rejected = await copyTo(destination, etag);
+      assert.equal(rejected.status, status);
+      await rejected.json();
+    }
+    assert.equal(copies.length, 1);
     rejectPatch = true;
     const conflict = await fetch(`${origin}/api/events/event1`, {
       method: "PATCH",

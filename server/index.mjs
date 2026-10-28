@@ -19,6 +19,7 @@ import {
   setLayoutDefault,
 } from "./store.mjs";
 import { fetchCalendar, parseFeed } from "./feeds.mjs";
+import { copiedEventBody } from "./copy-event.mjs";
 import {
   configured,
   oauth,
@@ -431,6 +432,45 @@ app.post("/api/events", auth, async (req, res) => {
   );
   res.status(201).json(result);
 });
+app.post("/api/events/:id/copy", auth, async (req, res) => {
+  const { calendarId, destinationCalendarId, etag } = z
+    .object({
+      calendarId: z.string().min(1).max(1024),
+      destinationCalendarId: z.string().min(1).max(1024),
+      etag: z.string().optional(),
+    })
+    .parse(req.body);
+  if (calendarId === destinationCalendarId)
+    return res
+      .status(400)
+      .json({ error: "Choose a different destination calendar." });
+  const calendars = await allPages(
+    req.session.accountId,
+    "users/me/calendarList?maxResults=250",
+  );
+  const destination = calendars.find((c) => c.id === destinationCalendarId);
+  if (!destination || !["owner", "writer"].includes(destination.accessRole))
+    return res
+      .status(403)
+      .json({ error: "Choose a calendar you can write to." });
+  const source = await googleRequest(
+    req.session.accountId,
+    `calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(req.params.id)}`,
+  );
+  if (etag && source.etag !== etag)
+    return res
+      .status(412)
+      .json({
+        error:
+          "This event changed in Google Calendar. Refresh before copying again.",
+      });
+  const copied = await googleRequest(
+    req.session.accountId,
+    `calendars/${encodeURIComponent(destinationCalendarId)}/events`,
+    { method: "POST", body: copiedEventBody(source) },
+  );
+  res.status(201).json(normalizeEvent(copied, destination));
+});
 app.patch("/api/events/:id", auth, async (req, res) => {
   const e = eventSchema.parse(req.body);
   if (!e.etag)
@@ -579,7 +619,7 @@ app.delete("/api/subscriptions/:id", auth, (req, res) => {
 app.get("/downloads/hypercal-debug.apk", (req, res) => {
   res.download(
     resolve("dist/downloads/hypercal-debug.apk"),
-    "HyperCal-0.3.0-debug.apk",
+    `HyperCal-${JSON.parse(readFileSync(resolve("package.json"), "utf8")).version}-debug.apk`,
     { headers: { "Cache-Control": "no-store" } },
   );
 });

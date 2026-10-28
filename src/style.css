@@ -3551,3 +3551,41 @@ body:has(.app-shell.native) #root {
   padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   height: 100dvh;
 }
+.popover-action-section {
+  margin: 0 8px 14px;
+  padding: 13px 0;
+  border-block: 1px solid var(--line);
+}
+.popover-action-section > p {
+  font-size: 12px;
+  margin: 0 0 12px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.popover-action-section .field {
+  margin-bottom: 10px;
+}
+.popover-action-section .copy-explanation {
+  font-size: 11px;
+  color: var(--muted);
+}
+.popover-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+.popover-action-buttons .primary-button,
+.popover-action-buttons .secondary-button {
+  font-size: 11px;
+  padding: 8px 12px;
+  min-height: 33px;
+}
+.popover-error {
+  padding: 0 9px 12px;
+  margin: 0;
+}
+.popover-actions .icon-button[aria-pressed="true"] {
+  background: var(--soft);
+  color: var(--accent);
+}

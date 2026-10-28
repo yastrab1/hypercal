@@ -776,8 +776,63 @@ export default function App() {
       );
     }
     setRefresh((n) => n + 1);
+    setPreview(null);
+    setExpandedDay(null);
     close();
     flash(live ? "Deleted from Google Calendar." : "Demo event deleted.");
+  }
+  async function copyEvent(source: CalendarEvent, destinationId: string) {
+    const destination = calendars.find(
+      (c) =>
+        c.id === destinationId && !c.readOnly && c.id !== source.calendarId,
+    );
+    if (!destination)
+      throw new Error("Choose a different calendar you can write to.");
+    if (live && !canWrite)
+      throw new Error("Connect and sync before copying events.");
+    if (!live) {
+      const { etag, htmlLink, recurring, ...details } = source;
+      setEvents((events) => [
+        ...events,
+        {
+          ...details,
+          id: crypto.randomUUID(),
+          calendarId: destinationId,
+          source: "demo",
+          readOnly: false,
+        },
+      ]);
+    } else {
+      if (source.source === "google")
+        await api(`/events/${encodeURIComponent(source.id)}/copy`, {
+          method: "POST",
+          body: JSON.stringify({
+            calendarId: source.calendarId,
+            destinationCalendarId: destinationId,
+            etag: source.etag,
+          }),
+        });
+      else
+        await api("/events", {
+          method: "POST",
+          body: JSON.stringify({
+            calendarId: destinationId,
+            title: source.title,
+            description: source.description,
+            location: source.location,
+            start: source.start,
+            end: source.end,
+            allDay: source.allDay,
+            timeZone: source.timeZone,
+            reminderMinutes: source.reminderMinutes,
+          }),
+        });
+      calendarCache.invalidateEvents(accountId!);
+      setRefresh((n) => n + 1);
+    }
+    setPreview(null);
+    setExpandedDay(null);
+    flash(`Copied to ${destination.name}${live ? "." : " in demo."}`);
   }
   async function saveView(v: SavedView) {
     if (live && !canWrite)
@@ -1451,9 +1506,14 @@ export default function App() {
       )}
       {preview && (
         <EventPopover
+          key={`${preview.event.calendarId}:${preview.event.id}`}
           event={preview.event}
           anchor={preview.anchor}
           calendar={calendars.find((c) => c.id === preview.event.calendarId)}
+          calendars={calendars}
+          actionsDisabled={live && !canWrite}
+          onDelete={() => deleteEvent(preview.event)}
+          onCopy={(destination) => copyEvent(preview.event, destination)}
           onClose={closePreview}
           onEdit={() => {
             setEditingEvent(preview.event);

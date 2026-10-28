@@ -12,7 +12,7 @@ Google Calendar remains the source of truth. HyperCal writes event changes direc
 ## Features
 
 - Day, week, month and year layouts, connected multi-day event bars, and expandable event lists for busy days.
-- Event detail popups, with a separate editor for changes. Create, edit and delete events, set locations, descriptions, notifications and repeating events.
+- Event detail popups with inline deletion confirmation and copying to another writable calendar, with a separate editor for changes. Copies leave the source unchanged and copy only the selected occurrence, without inviting guests. Create, edit and delete events, set locations, descriptions, notifications and repeating events.
 - Saved views that filter calendars and event text. Choose a default for each layout on the web; those choices also apply on Android. Clicking a date opens the default day view.
 - Light, dark and system themes. Compact mobile calendar, swipe navigation and a swipeable drawer containing your account, layouts and views.
 - Command palette and keyboard shortcuts. Arrow keys move by the displayed period; shortcuts pause while typing.

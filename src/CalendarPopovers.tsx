@@ -11,6 +11,9 @@ import {
   AlignLeft,
   CalendarDays,
   Clock,
+  Copy,
+  Trash2,
+  LoaderCircle,
   ExternalLink,
   MapPin,
   Pencil,
@@ -125,13 +128,34 @@ export function EventPopover({
   calendar,
   onClose,
   onEdit,
+  calendars,
+  actionsDisabled,
+  onDelete,
+  onCopy,
 }: {
   event: CalendarEvent;
   anchor: HTMLElement;
   calendar?: Calendar;
   onClose: () => void;
   onEdit: () => void;
+  calendars: Calendar[];
+  actionsDisabled: boolean;
+  onDelete: () => Promise<void>;
+  onCopy: (calendarId: string) => Promise<void>;
 }) {
+  const destinations = calendars.filter(
+    (c) => !c.readOnly && c.id !== event.calendarId,
+  );
+  const [action, setAction] = useState<"delete" | "copy" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [destination, setDestination] = useState(destinations[0]?.id || "");
+  useEffect(() => {
+    setAction(null);
+    setBusy(false);
+    setError("");
+    setDestination(destinations[0]?.id || "");
+  }, [event.id, event.calendarId]);
   const start = eventDate(event.start),
     end = eventDate(event.end);
   const last = event.allDay ? addDays(end, -1) : end;
@@ -149,11 +173,44 @@ export function EventPopover({
             className="icon-button"
             aria-label="Edit event"
             title="Edit event"
+            disabled={busy || actionsDisabled}
             onClick={onEdit}
           >
             <Pencil size={19} />
           </button>
         )}
+        {!event.readOnly && (
+          <button
+            className="icon-button"
+            aria-label="Delete event"
+            title="Delete event"
+            disabled={busy || actionsDisabled}
+            aria-pressed={action === "delete"}
+            onClick={() => {
+              setError("");
+              setAction(action === "delete" ? null : "delete");
+            }}
+          >
+            <Trash2 size={18} />
+          </button>
+        )}
+        <button
+          className="icon-button"
+          aria-label="Copy to another calendar"
+          title={
+            destinations.length
+              ? "Copy to another calendar"
+              : "No other writable calendars"
+          }
+          disabled={busy || actionsDisabled || !destinations.length}
+          aria-pressed={action === "copy"}
+          onClick={() => {
+            setError("");
+            setAction(action === "copy" ? null : "copy");
+          }}
+        >
+          <Copy size={18} />
+        </button>
         {event.htmlLink && (
           <a
             className="icon-button"
@@ -191,6 +248,119 @@ export function EventPopover({
           </p>
         </div>
       </div>
+      {action === "delete" && (
+        <div className="popover-action-section">
+          <p>
+            Delete this {event.recurring ? "occurrence" : "event"}
+            {calendar?.name ? ` from ${calendar.name}` : ""}?
+          </p>
+          <div className="popover-action-buttons">
+            <button
+              className="danger-button"
+              disabled={busy || actionsDisabled}
+              onClick={async () => {
+                setBusy(true);
+                setError("");
+                try {
+                  await onDelete();
+                } catch (e) {
+                  setError((e as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? (
+                <LoaderCircle size={15} className="spin" />
+              ) : (
+                <Trash2 size={15} />
+              )}
+              Confirm delete
+            </button>
+            <button
+              disabled={busy}
+              className="secondary-button"
+              onClick={() => {
+                setAction(null);
+                setError("");
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {action === "copy" && (
+        <form
+          className="popover-action-section"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!destination || busy || actionsDisabled) return;
+            setBusy(true);
+            setError("");
+            try {
+              await onCopy(destination);
+            } catch (e) {
+              setError((e as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <label className="field">
+            Destination calendar
+            <select
+              autoFocus
+              aria-label="Destination calendar"
+              value={destination}
+              disabled={busy}
+              onChange={(e) => setDestination(e.target.value)}
+            >
+              {destinations.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="copy-explanation">
+            {event.recurring
+              ? "Copies this occurrence only. "
+              : "Creates a separate event. "}
+            The original stays unchanged.
+          </p>
+          <div className="popover-action-buttons">
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={busy || actionsDisabled || !destination}
+            >
+              {busy ? (
+                <LoaderCircle size={15} className="spin" />
+              ) : (
+                <Copy size={15} />
+              )}{" "}
+              {busy ? "Copying…" : "Copy event"}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className="secondary-button"
+              onClick={() => {
+                setAction(null);
+                setError("");
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+      {error && (
+        <p className="form-error popover-error" role="alert">
+          {error}
+        </p>
+      )}
       {event.location && (
         <div className="preview-row">
           <MapPin size={18} />
