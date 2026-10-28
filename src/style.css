@@ -4054,3 +4054,285 @@ body:has(.app-shell.native) .event-panel {
   opacity: 1;
   cursor: default;
 }
+
+/* Calendar navigation and tags share the same compact sidebar rhythm. */
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  padding: 6px 0;
+  flex: 1;
+  text-align: left;
+}
+.tags-section {
+  padding: 8px 0 14px;
+}
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 36px;
+  padding: 2px 12px;
+}
+.tag-color {
+  position: relative;
+  display: flex;
+  width: 18px;
+  height: 24px;
+  align-items: center;
+  flex: none;
+  cursor: pointer;
+}
+.tag-color span,
+.event-tag-option i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+.tag-color input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+.tag-color:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.tag-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  font-size: 13px;
+}
+.tag-track span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.tag-track input {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.tag-countdown {
+  border-radius: 12px;
+  min-width: 30px;
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.sidebar-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 5px 12px;
+  line-height: 1.5;
+}
+.tag-create {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 12px;
+}
+.tag-create label {
+  min-width: 0;
+  flex: 1;
+}
+.tag-create input[name="name"] {
+  width: 100%;
+  min-width: 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 8px;
+  color: var(--ink);
+}
+.tag-create input[type="color"] {
+  width: 28px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: none;
+  flex: none;
+}
+.tags-section .form-error {
+  margin: 6px 12px;
+  font-size: 12px;
+}
+.event-tag-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 12px 0;
+}
+.event-tag-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+}
+.event-tag-section > .field {
+  margin-top: 10px;
+}
+.calendar-add-modes {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 15px;
+}
+.calendar-add-modes button {
+  font-size: 12px;
+}
+.calendar-add-modes button[aria-pressed="true"] {
+  background: var(--soft);
+  color: var(--accent);
+}
+.day-distance {
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 12px 14px;
+}
+.day-popup-status {
+  font-size: 12px;
+  padding: 4px 14px;
+  color: var(--muted);
+}
+.year-grid .mini-month .mini-grid button {
+  width: 26px;
+  height: 26px;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 1;
+  justify-self: center;
+  align-self: center;
+  border-radius: 50%;
+}
+.year-grid .mini-grid {
+  align-items: center;
+}
+@media (max-width: 760px) {
+  .tag-row {
+    min-height: 42px;
+  }
+  .tag-track {
+    font-size: 14px;
+  }
+  .tag-track input {
+    width: 18px;
+    height: 18px;
+  }
+  .tag-countdown {
+    font-size: 12px;
+  }
+}
+.header-tag-countdowns {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.header-tag-countdowns .tag-countdown {
+  font-size: 12px;
+  padding: 5px 9px;
+}
+@media (max-width: 760px) {
+  .topbar:has(.header-tag-countdowns),
+  .native .topbar:has(.header-tag-countdowns) {
+    flex-wrap: wrap;
+    height: auto;
+    padding-bottom: 8px;
+    row-gap: 5px;
+  }
+  .header-tag-countdowns {
+    order: 2;
+    flex-basis: 100%;
+    justify-content: flex-start;
+    gap: 5px;
+  }
+  .header-tag-countdowns .tag-countdown {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+}
+button.tag-track {
+  padding: 7px 0;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  border-radius: 4px;
+}
+.tag-track svg {
+  flex: none;
+  color: var(--muted);
+}
+.tag-track[aria-pressed="true"] svg {
+  color: var(--accent);
+}
+.header-tag-countdowns .tag-countdown {
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 20px;
+  min-width: 44px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 25%, transparent);
+}
+@media (max-width: 760px) {
+  .header-tag-countdowns .tag-countdown {
+    font-size: 13px;
+    line-height: 18px;
+    min-width: 40px;
+    padding: 5px 10px;
+  }
+}
+/* One tracked tag fits in the existing phone toolbar without adding a row. */
+@media (max-width: 760px) {
+  .topbar:has(.header-tag-countdowns),
+  .native .topbar:has(.header-tag-countdowns) {
+    flex-wrap: nowrap;
+    height: 60px;
+    padding-bottom: 9px;
+    row-gap: 0;
+  }
+  .header-tag-countdowns {
+    order: 0;
+    flex: 0 0 auto;
+    margin-left: auto;
+    margin-right: 8px;
+  }
+  .topbar:has(.header-tag-countdowns) .mobile-header-actions {
+    margin-left: 0;
+  }
+  .topbar:has(.header-tag-countdowns) .mobile-month-title {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+@media (max-width: 360px) {
+  .topbar:has(.header-tag-countdowns) .mobile-header-actions {
+    gap: 6px;
+  }
+  .header-tag-countdowns {
+    margin-right: 5px;
+  }
+}

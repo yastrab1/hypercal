@@ -1,3 +1,4 @@
+import { cleanTags } from "./tags.mjs";
 import { NotificationPicker } from "./NotificationPicker";
 import { notificationFields } from "./notifications.mjs";
 import { defaultEventColors } from "./event-colors.mjs";
@@ -17,10 +18,11 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import type { Calendar, CalendarEvent } from "./types";
+import type { Calendar, CalendarEvent, Tag } from "./types";
 import { eventDate } from "./Calendar";
 export function EventEditor({
   event,
+  tags,
   date,
   calendars,
   live,
@@ -31,6 +33,7 @@ export function EventEditor({
   onDelete,
   onClose,
 }: {
+  tags: Tag[];
   event: CalendarEvent | null;
   date: Date;
   calendars: Calendar[];
@@ -42,6 +45,8 @@ export function EventEditor({
   onDelete: (e: CalendarEvent) => Promise<void>;
   onClose: () => void;
 }) {
+  const [eventTags, setEventTags] = useState<string[]>(event?.tags || []);
+  const [tagInput, setTagInput] = useState("");
   const [color, setColor] = useState(event?.color || "");
   const [allDay, setAllDay] = useState(event?.allDay || false),
     [busy, setBusy] = useState(false),
@@ -106,6 +111,7 @@ export function EventEditor({
           id: event?.id || "",
           calendarId,
           title: String(f.get("title")).trim(),
+          tags: cleanTags([...eventTags, ...tagInput.split(",")]),
           description: String(f.get("description")),
           location: String(f.get("location")),
           start: s,
@@ -307,6 +313,43 @@ export function EventEditor({
               placeholder="Add location or meeting link"
               defaultValue={event?.location}
               maxLength={1024}
+            />
+          </label>
+        </div>
+        <div className="event-editor-section event-tag-section">
+          <span>Tags</span>
+          <div className="event-tag-options">
+            {[
+              ...tags,
+              ...eventTags
+                .filter((name) => !tags.some((t) => t.name === name))
+                .map((name) => ({ name, color: "#4b99d2", tracked: false })),
+            ].map((tag) => (
+              <label key={tag.name} className="event-tag-option">
+                <input
+                  type="checkbox"
+                  checked={eventTags.includes(tag.name)}
+                  onChange={(e) =>
+                    setEventTags(
+                      e.target.checked
+                        ? [...eventTags, tag.name]
+                        : eventTags.filter((name) => name !== tag.name),
+                    )
+                  }
+                />
+                <i style={{ background: tag.color }} />
+                {tag.name}
+              </label>
+            ))}
+          </div>
+          <label className="field">
+            New tags
+            <input
+              aria-label="New event tags"
+              placeholder="Separate tags with commas"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              maxLength={300}
             />
           </label>
         </div>

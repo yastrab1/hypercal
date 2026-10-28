@@ -24,6 +24,14 @@ Google Calendar remains the source of truth. HyperCal writes event changes direc
 
 HyperCal is an early prototype. It does not yet include attendee management, drag-to-reschedule, series editing or offline edit queues. Shared views support email-bound invitations, contributions from each member’s Google calendars, detail policies and revocable read-only web/iCalendar links. See [sharing behavior and limits](docs/SHARED_VIEWS.md).
 
+### Tags and date details
+
+Create colored tags below the collapsible calendar list, or add them while editing an event. Click a tag name to track it for the current view: only that tag shows an eye icon. Each saved view and each built-in layout remembers its own selection. Its bright top-bar pill shows days (`12d`) or calendar months plus days (`2mo 3d`) until the nearest event; `—` means no upcoming event was found. The countdown checks calendars independently of the displayed period. Google lookups have no future cutoff; subscribed/imported feeds are expanded up to five years ahead. Failed lookups retain cached countdowns and expose the refresh status in the pill tooltip.
+
+Tags are stored in Google event extended properties and in HyperCal iCalendar exports as standard `CATEGORIES`; imported `CATEGORIES` are read back. Google's own export does not guarantee conversion of application properties into categories. Calendar creation uses the Google `calendar.calendars` permission. Existing users can reconnect from account settings to grant it; no subscription URL is required to create an empty Google calendar.
+
+Click a date number in day, week or month view for its distance from today and its events. Clicking elsewhere in a month cell still opens the default day view. Keyboard shortcuts and Ctrl/Cmd K remain available after removing the Commands button.
+
 ## Android download
 
 The release APK is a **debug build**, signed consistently across maintainer builds. It can update earlier debug installs signed with that identity. Installation and native behavior have not been tested on every Android device.
@@ -87,7 +95,7 @@ Set `APP_URL` to the resulting HTTPS URL, register its `/auth/google/callback` w
 5. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the private server `.env`, then restart the server. Alternatively, set `GOOGLE_CREDENTIALS_FILE` to the path of your downloaded client JSON outside the repository.
 6. Use **Connect Google** in HyperCal and review Google's consent screen.
 
-Scopes: `openid`, `email`, `calendar.events`, and `calendar.calendarlist.readonly`. Test-mode grants may expire according to Google's policies. Tokens and server sessions are stored under the ignored `.data/` directory with private filesystem permissions. Back that directory up securely. Never commit `.env`, credential files, tokens or cached personal calendar data.
+Scopes: `openid`, `email`, `calendar.events`, `calendar.calendars`, and `calendar.calendarlist.readonly`. Test-mode grants may expire according to Google's policies. Tokens and server sessions are stored under the ignored `.data/` directory with private filesystem permissions. Back that directory up securely. Never commit `.env`, credential files, tokens or cached personal calendar data.
 
 ## Self-host
 

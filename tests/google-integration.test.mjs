@@ -50,6 +50,25 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     const path = new URL(options.url).pathname;
     const method = options.method;
     const body = options.data;
+    if (path === "/calendar/v3/calendars" && method === "POST") {
+      assert.equal(body.summary, "Created without a URL");
+      return { data: { id: "created-calendar", summary: body.summary } };
+    }
+    if (new URL(options.url).searchParams.has("sharedExtendedProperty")) {
+      assert.match(
+        new URL(options.url).searchParams.get("sharedExtendedProperty"),
+        /^hct_[a-f0-9]{32}=1$/,
+      );
+      return {
+        data: {
+          items: upstream.map((e) => ({
+            ...e,
+            start: { date: "2027-01-20" },
+            end: { date: "2027-01-21" },
+          })),
+        },
+      };
+    }
     if (path === "/calendar/v3/users/me/calendarList")
       return {
         data: {
@@ -153,8 +172,72 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     ).json();
     assert.equal(cs[0].name, "Alice");
     assert.equal(cs[0].readOnly, false);
+    const newCalendar = await fetch(`${origin}/api/calendars`, {
+      method: "POST",
+      headers: alice,
+      body: JSON.stringify({ name: "Created without a URL" }),
+    });
+    assert.equal(newCalendar.status, 201);
+    assert.equal((await newCalendar.json()).source, "google");
+    const tagDefinitions = [
+      { name: "Exam", color: "#a479b1" },
+      { name: "Holiday", color: "#55b080" },
+    ];
+    const tagSaved = await fetch(`${origin}/api/tags`, {
+      method: "PUT",
+      headers: alice,
+      body: JSON.stringify(tagDefinitions),
+    });
+    assert.equal(tagSaved.status, 200);
+    assert.deepEqual(
+      await (await fetch(`${origin}/api/tags`, { headers: alice })).json(),
+      tagDefinitions,
+    );
+    assert.deepEqual(
+      await (await fetch(`${origin}/api/tags`, { headers: bob })).json(),
+      [],
+    );
+    async function track(viewKey, tagName, headers = alice) {
+      return fetch(`${origin}/api/tag-tracking`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ viewKey, tagName }),
+      });
+    }
+    assert.equal((await track("layout:month", "Exam")).status, 200);
+    assert.equal((await track("layout:week", "Holiday")).status, 200);
+    assert.deepEqual(
+      await (
+        await fetch(`${origin}/api/tag-tracking`, { headers: alice })
+      ).json(),
+      { "layout:month": "Exam", "layout:week": "Holiday" },
+    );
+    assert.deepEqual(
+      await (
+        await fetch(`${origin}/api/tag-tracking`, { headers: bob })
+      ).json(),
+      {},
+    );
+    assert.equal((await track("view:someone-elses-view", "Exam")).status, 400);
+    assert.equal((await track("layout:month", "Missing")).status, 400);
+    assert.equal((await track("layout:month", "Holiday")).status, 200);
+    assert.deepEqual(
+      await (
+        await fetch(`${origin}/api/tag-tracking`, { headers: alice })
+      ).json(),
+      { "layout:month": "Holiday", "layout:week": "Holiday" },
+    );
+    assert.equal((await track("layout:month", "Exam")).status, 200);
+    const duplicateTags = await fetch(`${origin}/api/tags`, {
+      method: "PUT",
+      headers: alice,
+      body: JSON.stringify([...tagDefinitions, ...tagDefinitions]),
+    });
+    assert.equal(duplicateTags.status, 400);
+    await duplicateTags.json();
     const draft = {
       calendarId: "primary",
+      tags: ["Exam"],
       title: "HyperCal writes upstream",
       description: "",
       location: "Room B",
@@ -174,6 +257,15 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     assert.equal(created.status, 201);
     await created.json();
     assert.equal(upstream[0].summary, draft.title);
+    assert.deepEqual(
+      JSON.parse(upstream[0].extendedProperties.shared.hypercalTags),
+      ["Exam"],
+    );
+    const countdowns = await (
+      await fetch(`${origin}/api/tag-countdowns`, { headers: alice })
+    ).json();
+    assert.equal(countdowns.next.Exam.start, "2027-01-20");
+    assert.deepEqual(countdowns.warnings, []);
     assert.equal(
       upstream[0].extendedProperties.private.hypercalColor,
       draft.color,
@@ -194,6 +286,7 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     ).json();
     assert.equal(fromGoogle.events[0].title, "Changed from Google Calendar");
     assert.equal(fromGoogle.events[0].color, draft.color);
+    assert.deepEqual(fromGoogle.events[0].tags, ["Exam"]);
     assert.equal(fromGoogle.events[0].etag, '"v1"');
     upstream[0].recurringEventId = "series1";
     upstream[0].attendees = [{ email: "friend@example.test" }];
@@ -216,6 +309,7 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     assert.equal(copied.color, draft.color);
     assert.equal(copied.title, "Changed from Google Calendar");
     assert.equal(copies[0].attendees, undefined);
+    assert.equal(copies[0].extendedProperties.shared.hypercalTags, '["Exam"]');
     assert.equal(copies[0].recurringEventId, undefined);
     assert.equal(upstream.length, 1);
     assert.equal(upstream[0].id, "event1");
@@ -245,6 +339,7 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       body: JSON.stringify({
         ...draft,
         title: "Edited in HyperCal",
+        tags: [],
         useDefaultReminders: true,
         color: null,
         etag: '"v1"',
@@ -254,6 +349,12 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     await edited.json();
     assert.equal(upstream[0].summary, "Edited in HyperCal");
     assert.equal(upstream[0].colorId, null);
+    assert.equal(upstream[0].extendedProperties.shared.hypercalTags, "[]");
+    assert(
+      Object.entries(upstream[0].extendedProperties.shared).some(
+        ([key, value]) => key.startsWith("hct_") && value === null,
+      ),
+    );
     assert.equal(upstream[0].extendedProperties.private.hypercalColor, null);
     assert.deepEqual(upstream[0].reminders, { useDefault: true });
     const view = await fetch(`${origin}/api/views`, {

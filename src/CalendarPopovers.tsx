@@ -1,3 +1,4 @@
+import { dayDistance } from "./tags.mjs";
 import { eventColor } from "./event-colors.mjs";
 import {
   useEffect,
@@ -381,6 +382,12 @@ export function EventPopover({
           {event.readOnly && <small>Read-only</small>}
         </span>
       </div>
+      {!!event.tags?.length && (
+        <div className="preview-row event-preview-tags">
+          <span>Tags</span>
+          <span>{event.tags.join(", ")}</span>
+        </div>
+      )}
       {event.recurring && (
         <div className="preview-row">
           <Repeat2 size={18} />
@@ -396,6 +403,8 @@ export function EventPopover({
 }
 export function DayOverflowPopover({
   date,
+  loading = false,
+  error = "",
   events,
   calendars,
   anchor,
@@ -404,6 +413,8 @@ export function DayOverflowPopover({
   onOpenDay,
 }: {
   date: Date;
+  loading?: boolean;
+  error?: string;
   events: CalendarEvent[];
   calendars: Calendar[];
   anchor: HTMLElement;
@@ -440,6 +451,20 @@ export function DayOverflowPopover({
           <X size={19} />
         </button>
       </header>
+      <p className="day-distance">{dayDistance(date)}</p>
+      {loading && (
+        <p className="day-popup-status" role="status">
+          Loading events…
+        </p>
+      )}
+      {error && (
+        <p className="form-error day-popup-status" role="alert">
+          {error}
+        </p>
+      )}
+      {!loading && !error && sorted.length === 0 && (
+        <p className="day-popup-status">No events</p>
+      )}
       <div className="expanded-events">
         {sorted.map((event) => (
           <button

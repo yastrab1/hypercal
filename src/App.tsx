@@ -1,3 +1,5 @@
+import { TagsSection, TagCountdowns } from "./TagsSection";
+import { cleanTags } from "./tags.mjs";
 import {
   SharedSpace,
   sharedRouteFromLocation,
@@ -24,6 +26,7 @@ import {
 import {
   CalendarDays,
   Users,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -61,6 +64,7 @@ import {
 } from "lucide-react";
 import type {
   Calendar,
+  Tag,
   CalendarEvent,
   Layout,
   SavedView,
@@ -187,6 +191,13 @@ export default function App() {
         }
       : null,
   );
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagTracking, setTagTracking] = useState<Record<string, string | null>>(
+    {},
+  );
+  const [calendarsCollapsed, setCalendarsCollapsed] = useState(() =>
+    stored("hypercal.calendarsCollapsed", false),
+  );
   const [notificationDefault, setNotificationDefault] = useState("calendar");
   useEffect(() => {
     setNotificationDefault(
@@ -199,7 +210,8 @@ export default function App() {
   }, [session?.user?.id, session?.notificationDefault]);
   const [bootError, setBootError] = useState("");
   const [calendars, setCalendars] = useState<Calendar[]>(
-    cachedStart?.calendars || demoCalendars,
+    cachedStart?.calendars ||
+      stored<Calendar[]>("hypercal.demo.calendars", demoCalendars),
   );
   const [events, setEvents] = useState<CalendarEvent[]>(() =>
     cachedStart
@@ -217,7 +229,10 @@ export default function App() {
     () => cachedStart?.views || stored("hypercal.demo.views", initialViews),
   );
   const [visible, setVisible] = useState<string[]>(
-    (cachedStart?.calendars || demoCalendars).map((c) => c.id),
+    (
+      cachedStart?.calendars ||
+      stored<Calendar[]>("hypercal.demo.calendars", demoCalendars)
+    ).map((c) => c.id),
   );
   const [date, setDate] = useState(new Date());
   const [periodPreview, setPeriodPreview] = useState(false);
@@ -245,6 +260,48 @@ export default function App() {
     date: Date;
     anchor: HTMLElement;
   } | null>(null);
+  const [dayEvents, setDayEvents] = useState<CalendarEvent[] | null>(null);
+  const [dayLoading, setDayLoading] = useState(false);
+  const [dayError, setDayError] = useState("");
+  useEffect(() => {
+    setDayEvents(null);
+    setDayError("");
+    if (!expandedDay || !session?.connected || !verified || !online) {
+      setDayLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDayLoading(true);
+    const start = new Date(expandedDay.date);
+    start.setHours(0, 0, 0, 0);
+    const query = new URLSearchParams({
+      from: start.toISOString(),
+      to: addDays(start, 1).toISOString(),
+      calendars: JSON.stringify(calendars.map((c) => c.id).slice(0, 40)),
+    });
+    api<{ events: CalendarEvent[]; warnings: string[] }>(`/events?${query}`)
+      .then((result) => {
+        if (!cancelled) {
+          setDayEvents(result.events);
+          setDayError(result.warnings.join(" "));
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) setDayError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setDayLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    expandedDay?.date.getTime(),
+    session?.connected,
+    verified,
+    online,
+    calendars,
+  ]);
   const closePreview = useCallback(() => setPreview(null), []);
   const closeExpanded = useCallback(() => setExpandedDay(null), []);
   const [defaultError, setDefaultError] = useState("");
@@ -322,6 +379,68 @@ export default function App() {
   const live = !!session?.connected;
   const accountId = session?.user?.id;
   const canWrite = verified && online && !syncFailed;
+  const tagAccount = session?.user?.id || "demo";
+  const tagViewKey = activeView ? `view:${activeView}` : `layout:${layout}`;
+  const trackedTag = tagTracking[tagViewKey] || null;
+  useEffect(() => {
+    setTags(stored<Tag[]>(`hypercal.tags.${tagAccount}`, []));
+    setTagTracking(stored(`hypercal.tagTracking.${tagAccount}`, {}));
+    if (!live || !verified || !online) return;
+    let cancelled = false;
+    Promise.all([
+      api<Tag[]>("/tags"),
+      api<Record<string, string | null>>("/tag-tracking"),
+    ])
+      .then(([values, tracking]) => {
+        if (cancelled) return;
+        setTagTracking(tracking);
+        localStorage.setItem(
+          `hypercal.tagTracking.${tagAccount}`,
+          JSON.stringify(tracking),
+        );
+        if (cancelled) return;
+        setTags(values);
+        localStorage.setItem(
+          `hypercal.tags.${tagAccount}`,
+          JSON.stringify(values),
+        );
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tagAccount, live, verified, online, metadataRefresh]);
+  async function saveTags(values: Tag[]) {
+    if (live && !canWrite)
+      throw new Error("Connect and sync before changing tags.");
+    const result = live
+      ? await api<Tag[]>("/tags", {
+          method: "PUT",
+          body: JSON.stringify(values),
+        })
+      : values;
+    if (result.length > 40) throw new Error("Create up to 40 tags.");
+    localStorage.setItem(`hypercal.tags.${tagAccount}`, JSON.stringify(result));
+    setTags(result);
+  }
+
+  async function trackTag(tagName: string | null) {
+    if (live && !canWrite)
+      throw new Error("Connect and sync before changing tracked tags.");
+    const tracking = live
+      ? await api<Record<string, string | null>>("/tag-tracking", {
+          method: "PUT",
+          body: JSON.stringify({ viewKey: tagViewKey, tagName }),
+        })
+      : { ...tagTracking, [tagViewKey]: tagName };
+    setTagTracking(tracking);
+    localStorage.setItem(
+      `hypercal.tagTracking.${tagAccount}`,
+      JSON.stringify(tracking),
+    );
+  }
   const active = views.find((v) => v.id === activeView);
   const selection = active ? active.calendarIds : visible;
   const from =
@@ -449,9 +568,13 @@ export default function App() {
       if (!s.connected) {
         calendarCache.forget();
         setDataAccount(null);
-        setCalendars(demoCalendars);
+        setCalendars(stored("hypercal.demo.calendars", demoCalendars));
         setViews(stored("hypercal.demo.views", initialViews));
-        setVisible(demoCalendars.map((c) => c.id));
+        setVisible(
+          stored<Calendar[]>("hypercal.demo.calendars", demoCalendars).map(
+            (c) => c.id,
+          ),
+        );
         setEvents(stored("hypercal.demo.events", demoEvents()));
         setActiveView((current) => {
           const demoViews = stored<SavedView[]>(
@@ -777,6 +900,14 @@ export default function App() {
     return () => window.removeEventListener("keydown", listener);
   });
   async function saveEvent(draft: CalendarEvent, recurrence: string) {
+    const missing = cleanTags(draft.tags).filter(
+      (name) => !tags.some((t) => t.name === name),
+    );
+    if (missing.length)
+      await saveTags([
+        ...tags,
+        ...missing.map((name) => ({ name, color: "#4b99d2" })),
+      ]);
     if (!live) {
       setEvents((es) =>
         editingEvent
@@ -870,6 +1001,7 @@ export default function App() {
             allDay: source.allDay,
             timeZone: source.timeZone,
             color: source.color,
+            tags: source.tags,
             reminderMinutes: source.reminderMinutes,
           }),
         });
@@ -1259,50 +1391,65 @@ export default function App() {
         </nav>
         <section className="calendar-list">
           <div className="section-label">
-            <span>CALENDARS</span>
+            <button
+              className="section-toggle"
+              aria-expanded={!calendarsCollapsed}
+              aria-controls="sidebar-calendars"
+              onClick={() => {
+                setCalendarsCollapsed(!calendarsCollapsed);
+                localStorage.setItem(
+                  "hypercal.calendarsCollapsed",
+                  JSON.stringify(!calendarsCollapsed),
+                );
+              }}
+            >
+              <ChevronDown
+                size={15}
+                style={{
+                  transform: calendarsCollapsed ? "rotate(-90deg)" : undefined,
+                }}
+              />
+              <span>CALENDARS</span>
+            </button>
             <button
               className="icon-button"
-              aria-label="Add subscription"
+              aria-label="Add calendar"
               onClick={() => setPanel("subscription")}
             >
               <Plus size={16} />
             </button>
           </div>
-          {calendars.map((c) => (
-            <label key={c.id} className="calendar-toggle">
-              <input
-                type="checkbox"
-                checked={selection.includes(c.id)}
-                onChange={() => {
-                  setActiveView(null);
-                  setVisible(
-                    selection.includes(c.id)
-                      ? selection.filter((id) => id !== c.id)
-                      : [...selection, c.id],
-                  );
-                }}
-                style={{ accentColor: c.color }}
-              />
-              <span>{c.name}</span>
-              {c.source === "ical" && <Link size={12} />}
-            </label>
-          ))}
-          <button
-            className="subtle-link"
-            onClick={() => setPanel("subscription")}
-          >
-            <Link size={14} /> Add calendar by URL
-          </button>
+          <div id="sidebar-calendars" hidden={calendarsCollapsed}>
+            {calendars.map((c) => (
+              <label key={c.id} className="calendar-toggle">
+                <input
+                  type="checkbox"
+                  checked={selection.includes(c.id)}
+                  onChange={() => {
+                    setActiveView(null);
+                    setVisible(
+                      selection.includes(c.id)
+                        ? selection.filter((id) => id !== c.id)
+                        : [...selection, c.id],
+                    );
+                  }}
+                  style={{ accentColor: c.color }}
+                />
+                <span>{c.name}</span>
+                {c.source === "ical" && <Link size={12} />}
+              </label>
+            ))}
+          </div>
         </section>
+        <TagsSection
+          tags={tags}
+          live={live}
+          canWrite={canWrite}
+          onChange={saveTags}
+          trackedTag={trackedTag}
+          onTrack={trackTag}
+        />
         <div className="sidebar-bottom">
-          <button
-            className="sidebar-command"
-            onClick={() => setPanel("palette")}
-          >
-            <Command size={16} />
-            <span>Commands</span>
-            <kbd>Ctrl K</kbd>
-          </button>
           <button
             className="sidebar-command"
             onClick={() => setPanel("shortcuts")}
@@ -1378,6 +1525,16 @@ export default function App() {
             {format(date, "MMMM")} <ChevronRight size={14} />
           </button>
           <h1>{headerTitle}</h1>
+          <TagCountdowns
+            tags={tags}
+            events={events}
+            live={live}
+            canWrite={canWrite}
+            accountKey={tagAccount}
+            refresh={refresh}
+            trackedTag={trackedTag}
+            viewKey={tagViewKey}
+          />
           <div className="mobile-header-actions">
             <SyncIndicator
               busy={busy}
@@ -1410,8 +1567,8 @@ export default function App() {
           <div className="header-tools">
             <button
               className="icon-button"
-              aria-label="Search and commands"
-              title="Commands (Ctrl K)"
+              aria-label="Search events"
+              title="Search events (Ctrl K)"
               onClick={() => setPanel("palette")}
             >
               <Search size={20} />
@@ -1438,47 +1595,12 @@ export default function App() {
             >
               {isDark ? <Sun size={20} /> : <Moon size={20} />}
             </button>
-            <select
-              className="layout-select"
-              aria-label="Calendar layout"
-              value={layout}
-              onChange={(e) => changeLayout(e.target.value as Layout)}
-            >
-              {layouts.map((l) => (
-                <option key={l} value={l}>
-                  {labels[l]}
-                </option>
-              ))}
-            </select>
-            <select
-              className="perspective-select"
-              aria-label={`View for ${layout} layout`}
-              value={activeView || ""}
-              onChange={(e) => {
-                hasChosenView.current = true;
-                setActiveView(e.target.value || null);
-              }}
-            >
-              <option value="">
-                All calendars
-                {!getDefaultView(views, layout) ? " · default" : ""}
-              </option>
-              {views
-                .filter((v) => v.layout === layout)
-                .map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name}
-                    {v.isDefault ? " · default" : ""}
-                  </option>
-                ))}
-            </select>
             <button
-              className="connection-pill"
+              className={`avatar ${live ? "connected" : ""}`}
+              aria-label="Account and settings"
               onClick={() => setPanel("settings")}
             >
-              <span className={live ? "status-dot live" : "status-dot"} />
-              {live ? "Connected" : "Connect Google"}
-              <ArrowUpRight size={14} />
+              {live ? session?.user?.email[0].toUpperCase() : "H"}
             </button>
           </div>
         </header>
@@ -1611,8 +1733,10 @@ export default function App() {
       {expandedDay && (
         <DayOverflowPopover
           date={expandedDay.date}
+          loading={dayLoading}
+          error={dayError}
           anchor={expandedDay.anchor}
-          events={filtered.filter((e) => onDay(e, expandedDay.date))}
+          events={dayEvents || events.filter((e) => onDay(e, expandedDay.date))}
           calendars={calendars}
           onClose={closeExpanded}
           onEvent={(event, anchor) => setPreview({ event, anchor })}
@@ -1661,6 +1785,7 @@ export default function App() {
         >
           <EventEditor
             event={editingEvent}
+            tags={tags}
             date={newDate}
             calendars={calendars}
             live={live}
@@ -1695,17 +1820,31 @@ export default function App() {
         </Panel>
       )}
       {panel === "subscription" && (
-        <Panel title="Subscribe to a calendar" onClose={close}>
+        <Panel title="Add calendar" onClose={close}>
           <SubscriptionEditor
             live={live}
             calendars={calendars}
             onConnect={() => setPanel("settings")}
+            onDemoCalendar={(c) => {
+              localStorage.setItem(
+                "hypercal.demo.calendars",
+                JSON.stringify([...calendars, c]),
+              );
+              setCalendars((cs) => [...cs, c]);
+              setVisible((ids) => [...ids, c.id]);
+              setActiveView(null);
+              close();
+            }}
             onAdded={(c) => {
               setCalendars((cs) => [...cs, c]);
               setVisible((ids) => [...ids, c.id]);
               setActiveView(null);
               close();
-              flash("Calendar added. URL feeds refresh every five minutes.");
+              flash(
+                c.source === "google"
+                  ? "Calendar created in Google Calendar."
+                  : "Calendar added.",
+              );
             }}
             onRemove={async (id) => {
               await api(`/subscriptions/${id}`, { method: "DELETE" });
@@ -1730,6 +1869,9 @@ export default function App() {
             </p>
             {live ? (
               <>
+                <button className="secondary-button" onClick={connectGoogle}>
+                  Reconnect Google / allow calendar creation
+                </button>
                 <div className="connected-account">
                   <CheckCircle2 size={18} />
                   <span>{session?.user?.email}</span>
@@ -2150,33 +2292,58 @@ function SubscriptionEditor({
   onConnect,
   onAdded,
   onRemove,
+  onDemoCalendar,
 }: {
   live: boolean;
   calendars: Calendar[];
   onConnect: () => void;
   onAdded: (c: Calendar) => void;
   onRemove: (id: string) => Promise<void>;
+  onDemoCalendar: (c: Calendar) => void;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [mode, setMode] = useState<"new" | "subscription" | "import">("new");
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
   const [removeId, setRemoveId] = useState("");
-  const [importFile, setImportFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   return (
     <>
-      <p className="panel-description">
-        Bring in your school timetable, holidays, or any public iCalendar feed
-        or .ics file. Subscriptions and imports are read-only and stay in
-        HyperCal.
-      </p>
-      {!live ? (
-        <>
-          <div className="inline-note">
-            Connect Google first to save a subscription to your account.
-          </div>
-          <button className="primary-button" onClick={onConnect}>
-            Set up Google connection <ArrowUpRight size={16} />
+      <div
+        className="calendar-add-modes"
+        role="group"
+        aria-label="Calendar source"
+      >
+        {(
+          [
+            ["new", "New calendar"],
+            ["subscription", "Subscribe"],
+            ["import", "Import file"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            className="secondary-button"
+            aria-pressed={mode === value}
+            onClick={() => {
+              setMode(value);
+              setError("");
+            }}
+          >
+            {label}
           </button>
-        </>
+        ))}
+      </div>
+      <p className="panel-description">
+        {mode === "new"
+          ? "Create an empty calendar in your Google account. No subscription link needed."
+          : mode === "subscription"
+            ? "Follow a public iCalendar feed. Subscriptions are read-only."
+            : "Import a read-only snapshot from an iCalendar file."}
+      </p>
+      {!live && mode !== "new" ? (
+        <button className="primary-button" onClick={onConnect}>
+          Connect Google
+        </button>
       ) : (
         <form
           className="editor-form"
@@ -2186,17 +2353,32 @@ function SubscriptionEditor({
             setBusy(true);
             setError("");
             try {
-              if (importFile && importFile.size > 4 * 1024 * 1024)
-                throw new Error("Choose a calendar file smaller than 4 MB.");
-              const body = importFile
-                ? {
-                    name: f.get("name"),
-                    color: f.get("color"),
-                    text: await importFile.text(),
-                  }
-                : Object.fromEntries(f);
+              if (!live) {
+                onDemoCalendar({
+                  id: crypto.randomUUID(),
+                  name: String(f.get("name")).trim(),
+                  color: "#4b99d2",
+                  readOnly: false,
+                  source: "demo",
+                });
+                return;
+              }
+              if (mode === "import" && (!file || file.size > 4 * 1024 * 1024))
+                throw new Error("Choose an .ics file smaller than 4 MB.");
+              const body =
+                mode === "import"
+                  ? {
+                      name: f.get("name"),
+                      color: f.get("color"),
+                      text: await file!.text(),
+                    }
+                  : Object.fromEntries(f);
               const c = await api<Calendar>(
-                importFile ? "/imports" : "/subscriptions",
+                mode === "new"
+                  ? "/calendars"
+                  : mode === "import"
+                    ? "/imports"
+                    : "/subscriptions",
                 { method: "POST", body: JSON.stringify(body) },
               );
               onAdded(c);
@@ -2211,65 +2393,76 @@ function SubscriptionEditor({
             <label className="field">
               Calendar name
               <input
-                autoFocus
                 name="name"
+                autoFocus
                 required
-                placeholder="School timetable"
+                placeholder="Projects"
                 maxLength={80}
               />
             </label>
-            <label className="field">
-              iCal / subscription URL
-              <input
-                name="url"
-                required={!importFile}
-                disabled={!!importFile}
-                placeholder="https://example.com/calendar.ics"
-                maxLength={4000}
-              />
-              <small>
-                Public https://, http://, and webcal:// links are supported.
-              </small>
-            </label>
-            <label className="field">
-              Or import an iCalendar file
-              <input
-                type="file"
-                accept=".ics,text/calendar"
-                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-              />
-              <small>
-                Imports are a one-time snapshot. A URL subscription stays up to
-                date.
-              </small>
-            </label>
-            <label className="field">
-              Calendar color
-              <input type="color" name="color" defaultValue="#168675" />
-            </label>
+            {mode === "subscription" && (
+              <label className="field">
+                Subscription URL
+                <input
+                  name="url"
+                  required
+                  placeholder="https://example.com/calendar.ics"
+                  maxLength={4000}
+                />
+              </label>
+            )}
+            {mode === "import" && (
+              <label className="field">
+                iCalendar file
+                <input
+                  type="file"
+                  required
+                  accept=".ics,text/calendar"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                />
+              </label>
+            )}
+            {mode !== "new" && (
+              <label className="field">
+                Calendar color
+                <input type="color" name="color" defaultValue="#55b080" />
+              </label>
+            )}
           </fieldset>
+          {!live && (
+            <p className="inline-note">
+              Demo calendar, saved on this device. Connect Google to create a
+              live calendar.
+            </p>
+          )}
           {error && (
             <p className="form-error" role="alert">
               {error}
+              {error.includes("Reconnect") && (
+                <button
+                  type="button"
+                  className="subtle-link"
+                  onClick={onConnect}
+                >
+                  Open account settings
+                </button>
+              )}
             </p>
           )}
-          <button className="primary-button" disabled={busy} type="submit">
-            {busy ? (
-              <LoaderCircle className="spin" size={16} />
-            ) : (
-              <Plus size={16} />
-            )}{" "}
+          <button className="primary-button" disabled={busy}>
             {busy
-              ? "Reading calendar…"
-              : importFile
-                ? "Import calendar"
-                : "Add subscription"}
+              ? "Saving…"
+              : mode === "new"
+                ? "Create calendar"
+                : mode === "import"
+                  ? "Import calendar"
+                  : "Subscribe"}
           </button>
         </form>
       )}
       {calendars.some((c) => c.source === "ical") && (
         <section className="subscription-list">
-          <h3>Your subscriptions</h3>
+          <h3>Subscriptions and imports</h3>
           {calendars
             .filter((c) => c.source === "ical")
             .map((c) => (
@@ -2284,6 +2477,7 @@ function SubscriptionEditor({
                       return;
                     }
                     setBusy(true);
+                    setError("");
                     try {
                       await onRemove(c.id);
                     } catch (e) {
@@ -2302,6 +2496,7 @@ function SubscriptionEditor({
     </>
   );
 }
+
 function CommandPalette({
   commands,
   events,

@@ -1,3 +1,4 @@
+import { readEventTags } from "./tags.mjs";
 import { readEventColor } from "../src/event-colors.mjs";
 import { OAuth2Client } from "google-auth-library";
 import { readFileSync } from "node:fs";
@@ -17,6 +18,7 @@ export const scopes = [
   "openid",
   "email",
   "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar.calendars",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 ];
 export function oauth() {
@@ -72,6 +74,7 @@ export function normalizeEvent(e, calendar) {
   return {
     id: e.id,
     calendarId: calendar.id,
+    tags: readEventTags(e),
     title: e.summary || "Untitled event",
     description: e.description || "",
     location: e.location || "",

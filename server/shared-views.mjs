@@ -198,6 +198,7 @@ export function sharedICS(events, name) {
       e.allDay
         ? `DTEND;VALUE=DATE:${e.end.replaceAll("-", "")}`
         : `DTEND:${dt(e.end)}`,
+      ...(e.tags?.length ? [`CATEGORIES:${e.tags.map(esc).join(",")}`] : []),
       "END:VEVENT",
     );
   }

@@ -148,6 +148,10 @@ export function parseFeed(text, subscription, from, to) {
     result.push({
       id: `${subscription.id}:${event.uid}:${key}`,
       calendarId: subscription.id,
+      tags: event.component
+        .getAllProperties("categories")
+        .flatMap((p) => p.getValues())
+        .filter((x) => typeof x === "string"),
       title: event.summary || "Untitled event",
       description: event.description || "",
       location: event.location || "",

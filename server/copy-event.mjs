@@ -27,5 +27,14 @@ export function copiedEventBody(source) {
         hypercalColor: source.extendedProperties.private.hypercalColor,
       },
     };
+  if (source.extendedProperties?.shared) {
+    const shared = Object.fromEntries(
+      Object.entries(source.extendedProperties.shared).filter(
+        ([key]) => key === "hypercalTags" || key.startsWith("hct_"),
+      ),
+    );
+    if (Object.keys(shared).length)
+      body.extendedProperties = { ...body.extendedProperties, shared };
+  }
   return body;
 }

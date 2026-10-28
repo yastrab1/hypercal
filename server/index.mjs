@@ -1,3 +1,4 @@
+import { googleTagFields, tagKey, readEventTags } from "./tags.mjs";
 import { registerSharedViews } from "./shared-views.mjs";
 import { validNotification } from "../src/notifications.mjs";
 import { googleColorFields } from "../src/event-colors.mjs";
@@ -279,6 +280,171 @@ app.post("/api/logout", (req, res) =>
     res.json({ ok: true });
   }),
 );
+app.post("/api/calendars", auth, async (req, res) => {
+  const { name } = z
+    .object({ name: z.string().trim().min(1).max(80) })
+    .parse(req.body);
+  try {
+    const c = await googleRequest(req.session.accountId, "calendars", {
+      method: "POST",
+      body: {
+        summary: name,
+        timeZone: process.env.CALENDAR_TIMEZONE || "Europe/Prague",
+      },
+    });
+    res.status(201).json({
+      id: c.id,
+      name: c.summary,
+      color: "#4b99d2",
+      readOnly: false,
+      source: "google",
+    });
+  } catch (error) {
+    if (error.response?.status === 403 || error.status === 403)
+      return res.status(403).json({
+        error:
+          "Reconnect Google in account settings to allow calendar creation, then try again.",
+      });
+    throw error;
+  }
+});
+const tagsSchema = z
+  .array(
+    z.object({
+      name: z.string().trim().min(1).max(60),
+      color: z.string().regex(/^#[\da-f]{6}$/i),
+    }),
+  )
+  .max(40)
+  .refine(
+    (tags) => new Set(tags.map((t) => t.name)).size === tags.length,
+    "Tag names must be unique.",
+  );
+app.get("/api/tags", auth, (req, res) =>
+  res.json(getAccount(req.session.accountId).tags || []),
+);
+app.get("/api/tag-tracking", auth, (req, res) =>
+  res.json(getAccount(req.session.accountId).tagTracking || {}),
+);
+app.put("/api/tag-tracking", auth, (req, res) => {
+  const { viewKey, tagName } = z
+    .object({
+      viewKey: z.string().max(120),
+      tagName: z.string().max(60).nullable(),
+    })
+    .parse(req.body);
+  const account = getAccount(req.session.accountId);
+  if (!validTagView(account, viewKey))
+    return res
+      .status(400)
+      .json({ error: "Choose one of your calendar views." });
+  if (tagName && !(account.tags || []).some((t) => t.name === tagName))
+    return res.status(400).json({ error: "Choose an existing tag." });
+  const tracking = { ...account.tagTracking, [viewKey]: tagName };
+  upsertAccount(req.session.accountId, { tagTracking: tracking });
+  res.json(tracking);
+});
+function validTagView(account, key) {
+  return (
+    /^layout:(day|week|month|year)$/.test(key) ||
+    (key.startsWith("view:") &&
+      account.views.some((v) => `view:${v.id}` === key))
+  );
+}
+app.put("/api/tags", auth, (req, res) => {
+  const tags = tagsSchema.parse(req.body);
+  upsertAccount(req.session.accountId, { tags });
+  res.json(tags);
+});
+app.get("/api/tag-countdowns", auth, async (req, res) => {
+  const account = getAccount(req.session.accountId);
+  const viewKey = z
+    .string()
+    .max(120)
+    .parse(req.query.view || "layout:month");
+  if (!validTagView(account, viewKey))
+    return res
+      .status(400)
+      .json({ error: "Choose one of your calendar views." });
+  const trackedName = account.tagTracking?.[viewKey];
+  const tags = (account.tags || []).filter((t) => t.name === trackedName);
+  if (!tags.length) return res.json({ next: {}, warnings: [] });
+  const calendars = (
+    await allPages(
+      req.session.accountId,
+      "users/me/calendarList?maxResults=250",
+    )
+  ).filter((c) => c.accessRole !== "freeBusyReader");
+  const from = new Date();
+  const next = Object.fromEntries(tags.map((t) => [t.name, null]));
+  const warnings = new Set();
+  const consider = (event) => {
+    if (new Date(event.end) <= from) return;
+    for (const name of event.tags || [])
+      if (
+        name in next &&
+        (!next[name] || new Date(event.start) < new Date(next[name].start))
+      )
+        next[name] = { start: event.start, title: event.title };
+  };
+  // Provider-side tag filtering avoids downloading entire school timetables.
+  const jobs = calendars.flatMap((c) =>
+    tags.map((t) => async () => {
+      const query = new URLSearchParams({
+        singleEvents: "true",
+        orderBy: "startTime",
+        maxResults: "1",
+        timeMin: from.toISOString(),
+        sharedExtendedProperty: `${tagKey(t.name)}=1`,
+      });
+      const result = await googleRequest(
+        req.session.accountId,
+        `calendars/${encodeURIComponent(c.id)}/events?${query}`,
+      );
+      for (const e of result.items || []) consider(normalizeEvent(e, c));
+    }),
+  );
+  const feedTo = new Date(from);
+  feedTo.setFullYear(feedTo.getFullYear() + 5);
+  for (const sub of account.subscriptions)
+    jobs.push(async () => {
+      let text = sub.cached;
+      if (
+        sub.kind !== "import" &&
+        (!text || Date.now() - (sub.refreshedAt || 0) > 5 * 60000)
+      ) {
+        text = await fetchCalendar(sub.url);
+        updateItem(req.session.accountId, "subscriptions", sub.id, {
+          cached: text,
+          refreshedAt: Date.now(),
+        });
+      }
+      if (!text) return;
+      for (const e of parseFeed(
+        text,
+        sub,
+        from.toISOString(),
+        feedTo.toISOString(),
+      ))
+        consider(e);
+    });
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, jobs.length) }, async () => {
+      while (cursor < jobs.length) {
+        const job = jobs[cursor++];
+        try {
+          await job();
+        } catch {
+          warnings.add(
+            "Some calendars could not be checked for tag countdowns.",
+          );
+        }
+      }
+    }),
+  );
+  res.json({ next, warnings: [...warnings] });
+});
 app.get("/api/calendars", auth, async (req, res) => {
   const items = await allPages(
     req.session.accountId,
@@ -383,6 +549,14 @@ app.get("/api/events", auth, async (req, res) => {
 const eventSchema = z
   .object({
     calendarId: z.string().min(1).max(1024),
+    tags: z
+      .array(z.string().trim().min(1).max(60))
+      .max(12)
+      .refine(
+        (tags) => Buffer.byteLength(JSON.stringify(tags)) <= 1024,
+        "Tags must fit in Google event metadata (1024 bytes).",
+      )
+      .optional(),
     title: z.string().trim().min(1).max(1024),
     description: z.string().max(8000).default(""),
     location: z.string().max(1024).default(""),
@@ -440,6 +614,10 @@ function eventBody(e) {
       };
   return {
     ...googleColorFields(e.color),
+    extendedProperties: {
+      ...googleColorFields(e.color).extendedProperties,
+      ...googleTagFields(e.tags, e.previousTags),
+    },
     summary: e.title,
     description: e.description,
     location: e.location,
@@ -512,10 +690,24 @@ app.patch("/api/events/:id", auth, async (req, res) => {
   const e = eventSchema.parse(req.body);
   if (!e.etag)
     return res.status(400).json({ error: "Refresh the event before editing." });
+  const source =
+    e.tags === undefined
+      ? null
+      : await googleRequest(
+          req.session.accountId,
+          `calendars/${encodeURIComponent(e.calendarId)}/events/${encodeURIComponent(req.params.id)}`,
+        );
   const result = await googleRequest(
     req.session.accountId,
     `calendars/${encodeURIComponent(e.calendarId)}/events/${encodeURIComponent(req.params.id)}`,
-    { method: "PATCH", body: eventBody(e), etag: e.etag },
+    {
+      method: "PATCH",
+      body: eventBody({
+        ...e,
+        previousTags: source ? readEventTags(source) : [],
+      }),
+      etag: e.etag,
+    },
   );
   res.json(result);
 });

@@ -202,8 +202,8 @@ export function CalendarCanvas({
                     >
                       <button
                         className={`date-number ${isSameDay(day, new Date()) ? "today" : ""}`}
-                        onClick={() => onDate(day, "day")}
-                        aria-label={`Open ${format(day, "MMMM d")}`}
+                        onClick={(e) => onExpandDay(day, e.currentTarget)}
+                        aria-label={`Events and countdown for ${format(day, "MMMM d")}`}
                       >
                         {format(day, "d")}
                       </button>
@@ -302,7 +302,7 @@ export function CalendarCanvas({
           <button
             key={d.toISOString()}
             className={`day-label ${isSameDay(d, new Date()) ? "current" : ""}`}
-            onClick={() => onDate(d, "day")}
+            onClick={(e) => onExpandDay(d, e.currentTarget)}
           >
             <span>{format(d, "EEE")}</span>
             <strong>{format(d, "d")}</strong>

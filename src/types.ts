@@ -7,7 +7,13 @@ export interface Calendar {
   source: "google" | "ical" | "demo";
   primary?: boolean;
 }
+export interface Tag {
+  name: string;
+  color: string;
+
+}
 export interface CalendarEvent {
+  tags?: string[];
   id: string;
   calendarId: string;
   title: string;
