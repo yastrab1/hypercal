@@ -10,7 +10,7 @@ export function googleTagFields(tags, previous = []) {
     shared: {
       hypercalTags: JSON.stringify(names),
       ...Object.fromEntries(
-        cleanTags(previous).map((name) => [tagKey(name), null]),
+        cleanTags(previous).map((name) => [tagKey(name), "0"]),
       ),
       ...Object.fromEntries(names.map((name) => [tagKey(name), "1"])),
     },

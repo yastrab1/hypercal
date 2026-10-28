@@ -363,10 +363,13 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     assert.equal(upstream[0].extendedProperties.shared.hypercalTags, "[]");
     assert(
       Object.entries(upstream[0].extendedProperties.shared).some(
-        ([key, value]) => key.startsWith("hct_") && value === null,
+        ([key, value]) => key.startsWith("hct_") && value === "0",
       ),
     );
-    assert.equal(upstream[0].extendedProperties.private.hypercalColor, null);
+    assert.equal(
+      upstream[0].extendedProperties.private.hypercalColor,
+      "default",
+    );
     assert.deepEqual(upstream[0].reminders, { useDefault: true });
     const view = await fetch(`${origin}/api/views`, {
       method: "POST",

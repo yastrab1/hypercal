@@ -20,7 +20,7 @@ test("tag metadata preserves Unicode and removes obsolete searchable keys", () =
   const tags = ["Final, exam", "Škola", "Final, exam"];
   assert.deepEqual(cleanTags(tags), ["Final, exam", "Škola"]);
   const fields = googleTagFields(tags, ["Old tag"]);
-  assert.equal(fields.shared[tagKey("Old tag")], null);
+  assert.equal(fields.shared[tagKey("Old tag")], "0");
   assert.equal(fields.shared[tagKey("Škola")], "1");
   assert(tagKey("Škola").length <= 44);
   assert.deepEqual(readEventTags({ extendedProperties: fields }), [

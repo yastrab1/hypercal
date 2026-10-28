@@ -58,7 +58,7 @@ export function googleColorFields(color) {
     : null;
   return {
     colorId: nearest?.id || "0",
-    extendedProperties: { private: { hypercalColor: color } },
+    extendedProperties: { private: { hypercalColor: color || "default" } },
   };
 }
 function distance(a, b) {
