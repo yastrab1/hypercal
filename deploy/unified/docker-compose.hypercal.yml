@@ -1,0 +1,35 @@
+# Copy this file into R2D2's unified directory and include it in docker-compose.yml.
+# Keep .env and .data in the existing HyperCal checkout; neither enters the image.
+services:
+  hypercal:
+    build:
+      context: ${HYPERCAL_ROOT:-../hypercal}
+      dockerfile: Dockerfile
+    image: hypercal:local
+    pull_policy: never
+    restart: unless-stopped
+    init: true
+    user: ${HYPERCAL_UID:-1000}:${HYPERCAL_GID:-1000}
+    env_file:
+      - ${HYPERCAL_ROOT:-../hypercal}/.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+      DATA_DIR: /data
+      TRUST_PROXY: 1
+      COOKIE_SECURE: "true"
+    ports:
+      - 127.0.0.1:3791:3001
+    volumes:
+      - ${HYPERCAL_ROOT:-../hypercal}/.data:/data
+      - ${HYPERCAL_ROOT:-../hypercal}/dist/downloads:/app/dist/downloads:ro
+    networks: [hypercal]
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 30s
+
+networks:
+  hypercal:

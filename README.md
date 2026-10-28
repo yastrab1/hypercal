@@ -51,6 +51,28 @@ npm test
 npm run build
 ```
 
+## Docker and Compose
+
+The multi-stage Docker image builds the web interface and installs production dependencies. Its build context excludes secrets, runtime data and Android signing keys. Node runs without root privileges; Compose keeps `/data` writable while the image filesystem is read-only.
+
+```sh
+cp .env.example .env
+# Set APP_URL=http://localhost:3791 for a local Docker demo.
+# For public HTTPS, set APP_URL to the public URL and COOKIE_SECURE=true.
+mkdir -p dist/downloads
+docker compose up -d --build
+```
+
+The standalone Compose file publishes only `127.0.0.1:3791` and persists accounts, sessions and shared views in the `hypercal-data` volume. Keep Google credentials in the private `.env`; they are passed at runtime. If using `GOOGLE_CREDENTIALS_FILE` instead, mount that JSON file read-only through a local Compose override and set its container path.
+
+For public access through an existing Tailscale host, enable a narrowly scoped Funnel policy and forward an unused supported port, for example:
+
+```sh
+tailscale funnel --bg --https=10000 http://127.0.0.1:3791
+```
+
+Set `APP_URL` to the resulting HTTPS URL, register its `/auth/google/callback` with Google, and build Android using the same URL. Funnel exposes the application; Google sign-in and sharing permissions still apply. The [unified-stack Compose file and deployment notes](deploy/unified/README.md) document the R2D2 deployment and preserve its existing data and private services.
+
 ## Connect Google Calendar
 
 1. Create or select a Google Cloud project and enable the **Google Calendar API**.
@@ -119,7 +141,7 @@ The backend also serves the packaged APK at `/downloads/hypercal-debug.apk`. Bui
 
 ## CI and releases
 
-Every push to `main` and every pull request runs tests, builds the web app and builds an Android debug APK. Successful pushes to `main` update the **continuous** prerelease and its stable APK download URL. Version tags matching `v*` create versioned releases. Build artifacts are also available from the Actions run.
+Every push to `main` and every pull request runs tests, builds and smoke-tests the Docker image, builds the web app and builds an Android debug APK. Successful pushes to `main` update the **continuous** prerelease and its stable APK download URL. Version tags matching `v*` create versioned releases. Build artifacts are also available from the Actions run.
 
 Repository configuration:
 

@@ -39,6 +39,13 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm test
+      - name: Build and smoke-test Docker image
+        run: |
+          docker build -t hypercal-ci .
+          trap 'docker rm -f hypercal-ci-test >/dev/null 2>&1 || true' EXIT
+          docker run -d --name hypercal-ci-test --read-only --tmpfs /tmp --tmpfs /data:uid=1000,gid=1000,mode=0700 -p 127.0.0.1:39732:3001 hypercal-ci
+          curl --retry 15 --retry-all-errors --retry-delay 1 -fsS http://127.0.0.1:39732/api/health
+          docker exec hypercal-ci-test sh -c 'test ! -f /app/.env && test ! -d /app/.data'
       - name: Build web and sync Android
         run: npm run android:sync
       - name: Restore consistent debug signing identity

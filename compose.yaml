@@ -1,0 +1,28 @@
+name: hypercal
+services:
+  hypercal:
+    build: .
+    image: hypercal:local
+    restart: unless-stopped
+    init: true
+    env_file: ${HYPERCAL_ENV_FILE:-.env}
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+      DATA_DIR: /data
+      APP_URL: ${APP_URL:-http://localhost:3791}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports:
+      - 127.0.0.1:${HYPERCAL_PORT:-3791}:3001
+    volumes:
+      - hypercal-data:/data
+      - ./dist/downloads:/app/dist/downloads:ro
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 30s
+volumes:
+  hypercal-data:

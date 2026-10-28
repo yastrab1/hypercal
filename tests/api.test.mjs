@@ -15,6 +15,7 @@ test("API isolates unauthenticated accounts and rejects forged writes", async ()
       ...process.env,
       PORT: String(port),
       APP_URL: origin,
+      ALLOWED_ORIGINS: "https://legacy.hypercal.example",
       DATA_DIR: dir,
       GOOGLE_CLIENT_ID: "",
       GOOGLE_CLIENT_SECRET: "",
@@ -32,6 +33,9 @@ test("API isolates unauthenticated accounts and rejects forged writes", async ()
         setTimeout(() => reject(new Error("Startup timed out")), 7000).unref(),
       ),
     ]);
+    const health = await fetch(`${origin}/api/health`);
+    assert.equal(health.status, 200);
+    assert.equal(health.headers.get("set-cookie"), null);
     const s = await fetch(`${origin}/api/session`);
     const data = await s.json();
     const cookie = s.headers.get("set-cookie").split(";")[0];
@@ -70,6 +74,28 @@ test("API isolates unauthenticated accounts and rejects forged writes", async ()
       body: "{}",
     });
     assert.equal(unauthed.status, 401);
+    const legacy = await fetch(`${origin}/api/views`, {
+      method: "POST",
+      headers: {
+        Cookie: cookie,
+        "X-CSRF-Token": data.csrf,
+        Origin: "https://legacy.hypercal.example",
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    assert.equal(legacy.status, 401); // Explicit legacy origin passes CSRF, still requires authentication.
+    const legacyForged = await fetch(`${origin}/api/views`, {
+      method: "POST",
+      headers: {
+        Cookie: cookie,
+        Origin: "https://legacy.hypercal.example",
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    assert.equal(legacyForged.status, 403); // Allowlisting never replaces the CSRF token.
+
     const badState = await fetch(
       `${origin}/auth/google/callback?code=invalid&state=forged`,
       { headers: { Cookie: cookie } },

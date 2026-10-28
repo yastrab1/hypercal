@@ -39,6 +39,14 @@ setInterval(() => {
 const app = express();
 const FileStore = FileStoreFactory(session);
 const appUrl = process.env.APP_URL || "http://localhost:5173";
+const allowedOrigins = new Set([
+  new URL(appUrl).origin,
+  ...(process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map((x) => new URL(x).origin),
+]);
 if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 app.use(
   helmet({
@@ -57,6 +65,8 @@ app.use(
 );
 app.use("/api/imports", express.json({ limit: "5mb" }));
 app.use(express.json({ limit: "256kb" }));
+// Health probes do not allocate sessions or write files.
+app.get("/api/health", (req, res) => res.json({ ok: true }));
 const secretPath = resolve(dataDir, "session-secret");
 let secret = process.env.SESSION_SECRET;
 if (!secret) {
@@ -98,7 +108,7 @@ app.use("/api", (req, res, next) => {
   if (!req.session.csrf) req.session.csrf = randomBytes(24).toString("hex");
   if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     const origin = req.headers.origin;
-    if (origin && origin !== new URL(appUrl).origin)
+    if (origin && !allowedOrigins.has(origin))
       return res.status(403).json({ error: "Request origin is not allowed." });
     const token = req.headers["x-csrf-token"];
     const expected = req.session.csrf;
@@ -113,7 +123,6 @@ app.use("/api", (req, res, next) => {
   }
   next();
 });
-app.get("/api/health", (req, res) => res.json({ ok: true }));
 app.get("/api/session", (req, res) => {
   const a = getAccount(req.session.accountId);
   res.json({
