@@ -1,13 +1,9 @@
 import { usePeriodGesture } from "./usePeriodGesture";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  addDays,
   addMonths,
   addYears,
-  endOfMonth,
   format,
-  startOfMonth,
-  startOfWeek,
 } from "date-fns";
 import {
   ArrowLeft,
@@ -23,7 +19,7 @@ import { api } from "./api";
 import { CalendarCanvas, onDay } from "./Calendar";
 import { EventPopover, DayOverflowPopover } from "./CalendarPopovers";
 import { Panel } from "./Panel";
-import { shiftPeriod } from "./period.mjs";
+import { monthRange, shiftPeriod } from "./period.mjs";
 import type { Calendar, CalendarEvent, Layout } from "./types";
 export type SharedRoute = {
   kind: "hub" | "view" | "invite" | "public";
@@ -221,8 +217,7 @@ export function SharedSpace({
     setBusy(true);
     setError("");
     setPreview(null);
-    const from = startOfWeek(startOfMonth(date), { weekStartsOn: 1 }),
-      to = addDays(endOfMonth(date), 8);
+    const { from, to } = monthRange(date, true);
     const query = new URLSearchParams({
       from: (layout === "year"
         ? new Date(date.getFullYear(), 0, 1)
