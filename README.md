@@ -35,7 +35,7 @@ Saving or deleting a recurring event opens a scope popup: **This event**, **All 
 
 Tags are stored in Google event extended properties and in HyperCal iCalendar exports as standard `CATEGORIES`; imported `CATEGORIES` are read back. Google's own export does not guarantee conversion of application properties into categories. Calendar creation uses the Google `calendar.calendars` permission. Existing users can reconnect from account settings to grant it; no subscription URL is required to create an empty Google calendar.
 
-Click a date number in day, week or month view for its distance from today and its events. Clicking elsewhere in a month cell still opens the default day view. Keyboard shortcuts and Ctrl/Cmd K remain available after removing the Commands button.
+Click a date number in day, week or month view for its distance from today and its events. Clicking elsewhere in a month cell still opens the default day view. Double-click an editable event on the web to open its editor directly; single-click opens details. Ctrl/Cmd F or the “Filter visible events” command opens filtering without a permanent search row. Calendars and Tags start collapsed and remember expansion. Mobile months always show six weeks, with a small camera-safe toolbar inset. Keyboard shortcuts and Ctrl/Cmd K remain available.
 
 ## Android download
 
@@ -150,7 +150,7 @@ cd android
 ./gradlew :app:connectedDebugAndroidTest
 ```
 
-The backend also serves the packaged APK at `/downloads/hypercal-debug.apk`. Build packaging runs after Capacitor sync so the APK is not recursively bundled into itself.
+The backend directly downloads the latest packaged APK at [`/download`](https://r2d2.tail6caf54.ts.net:10000/download), with `/downloads/hypercal-debug.apk` kept as an alias. Build packaging runs after Capacitor sync so the APK is not recursively bundled into itself.
 
 ## CI and releases
 
@@ -166,6 +166,7 @@ Repository configuration:
 | Key | Action |
 | --- | --- |
 | Ctrl/Cmd K | Command palette |
+| Ctrl/Cmd F or / | Filter events in the current view |
 | D / W / M / Y | Default day / week / month / year view |
 | ← / →, K / J, P / N | Previous / next displayed period |
 | T | Today |

@@ -410,6 +410,7 @@ export function DayOverflowPopover({
   anchor,
   onClose,
   onEvent,
+  onEdit,
   onOpenDay,
 }: {
   date: Date;
@@ -420,6 +421,7 @@ export function DayOverflowPopover({
   anchor: HTMLElement;
   onClose: () => void;
   onEvent: (event: CalendarEvent, anchor: HTMLElement) => void;
+  onEdit?: (event: CalendarEvent) => void;
   onOpenDay: () => void;
 }) {
   const sorted = [...events].sort(
@@ -476,6 +478,9 @@ export function DayOverflowPopover({
               } as React.CSSProperties
             }
             onClick={(e) => onEvent(event, e.currentTarget)}
+            onDoubleClick={() => {
+              if (!event.readOnly) onEdit?.(event);
+            }}
           >
             <i />
             <span>

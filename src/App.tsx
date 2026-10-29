@@ -9,7 +9,7 @@ import {
   type SharedRoute,
 } from "./SharedSpace";
 import { NotificationDefaults } from "./NotificationPicker";
-import { shiftPeriod } from "./period.mjs";
+import { monthRange, shiftPeriod } from "./period.mjs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   addDays,
@@ -40,7 +40,6 @@ import {
   Keyboard,
   RefreshCw,
   Menu,
-  Settings,
   LogOut,
   Trash2,
   Globe,
@@ -128,7 +127,7 @@ const shortcutGroups = [
     items: [
       ["C", "Create an event"],
       ["⌘ / Ctrl K", "Open command palette"],
-      ["/", "Search events"],
+      ["Ctrl/Cmd F / /", "Filter visible events"],
       ["⌘ / Ctrl ↵", "Save an editor"],
       ["Esc", "Close a panel"],
       ["?", "Keyboard shortcuts"],
@@ -197,7 +196,7 @@ export default function App() {
     {},
   );
   const [calendarsCollapsed, setCalendarsCollapsed] = useState(() =>
-    stored("hypercal.calendarsCollapsed", false),
+    stored("hypercal.calendarsCollapsed", true),
   );
   const [notificationDefault, setNotificationDefault] = useState("calendar");
   useEffect(() => {
@@ -315,6 +314,7 @@ export default function App() {
     | "shortcuts"
     | "palette"
     | "goto"
+    | "find"
     | null
   >(null);
   const [recurrenceRequest, setRecurrenceRequest] = useState<{
@@ -387,7 +387,6 @@ export default function App() {
     localStorage.setItem("hypercal.layout", JSON.stringify(layout));
   }, [layout]);
   const generation = useRef(0);
-  const searchRef = useRef<HTMLInputElement>(null);
   const live = !!session?.connected;
   const accountId = session?.user?.id;
   const canWrite = verified && online && !syncFailed;
@@ -524,7 +523,9 @@ export default function App() {
   const to =
     layout === "year"
       ? addDays(endOfYear(date), 1)
-      : addDays(endOfMonth(date), 8);
+      : layout === "month" && !desktop
+        ? monthRange(date, true).to
+        : addDays(endOfMonth(date), 8);
   const rangeKey = `${from.toISOString()}|${to.toISOString()}|${JSON.stringify([...selection].sort())}`;
   const displayFrom =
     layout === "day"
@@ -539,7 +540,7 @@ export default function App() {
         ? addDays(displayFrom, 7)
         : layout === "year"
           ? startOfYear(addYears(date, 1))
-          : addDays(startOfWeek(endOfMonth(date), { weekStartsOn: 1 }), 7);
+          : monthRange(date, !desktop).to;
   const filtered = filterEvents(
     events.filter(
       (e) =>
@@ -907,6 +908,18 @@ export default function App() {
         setPanel((p) => (p === "palette" ? null : "palette"));
         return;
       }
+      if (
+        !Capacitor.isNativePlatform() &&
+        (e.ctrlKey || e.metaKey) &&
+        e.key.toLowerCase() === "f" &&
+        (!panel || panel === "find" || panel === "palette")
+      ) {
+        e.preventDefault();
+        setPreview(null);
+        setExpandedDay(null);
+        setPanel("find");
+        return;
+      }
       if (!shortcuts || e.ctrlKey || e.metaKey || e.altKey || e.isComposing)
         return;
       if (e.key === "Escape" && sidebar) {
@@ -966,7 +979,7 @@ export default function App() {
           )[key],
         );
       else if (key === "c") openCreate(new Date(date));
-      else if (key === "/") searchRef.current?.focus();
+      else if (key === "/") setPanel("find");
       else if (key === "?") setPanel("shortcuts");
       else if (key === "g") setPanel("goto");
       else {
@@ -1138,7 +1151,31 @@ export default function App() {
   const monthStart = startOfWeek(startOfMonth(date), { weekStartsOn: 1 });
   const headerTitle =
     layout === "year" ? format(date, "yyyy") : format(date, "MMMM yyyy");
+  const openEdit = (event: CalendarEvent) => {
+    if (event.readOnly || (live && !canWrite)) return;
+    setEditingEvent(event);
+    setPreview(null);
+    setExpandedDay(null);
+    setPanel("event");
+  };
   const commands = [
+    {
+      name: "Filter visible events",
+      key: "Ctrl F",
+      action: () => setPanel("find"),
+    },
+    ...(search
+      ? [
+          {
+            name: "Clear event filter",
+            key: "",
+            action: () => {
+              setSearch("");
+              close();
+            },
+          },
+        ]
+      : []),
     {
       name: "Switch to dark mode",
       key: "",
@@ -1257,26 +1294,6 @@ export default function App() {
           </span>
           <small>PREVIEW</small>
         </a>
-        <div className="drawer-account">
-          {" "}
-          <button
-            className="account-button"
-            onClick={() => setPanel("settings")}
-          >
-            <span className={`avatar ${live ? "connected" : ""}`}>
-              {live ? session?.user?.email[0].toUpperCase() : "H"}
-            </span>
-            <span>
-              <strong>
-                {live ? session?.user?.email : "Your Google Calendar"}
-              </strong>
-              <small>
-                {live ? "Google connected" : "Connect Google Calendar"}
-              </small>
-            </span>
-            <Settings size={16} />
-          </button>
-        </div>
         <button
           className="drawer-close icon-button"
           aria-label="Close navigation drawer"
@@ -1620,6 +1637,18 @@ export default function App() {
             trackedTag={trackedTag}
             viewKey={tagViewKey}
           />
+          {search && (
+            <button
+              className="active-event-filter"
+              title={`Clear filter: ${search}`}
+              aria-label={`Clear event filter: ${search}`}
+              onClick={() => setSearch("")}
+            >
+              <Search size={13} />
+              <span>{search}</span>
+              <X size={13} />
+            </button>
+          )}
           <div className="mobile-header-actions">
             <SyncIndicator
               busy={busy}
@@ -1728,34 +1757,6 @@ export default function App() {
             {warnings.join(" ")}
           </div>
         )}
-        <div className="search-row">
-          <Search size={14} />
-          <input
-            ref={searchRef}
-            aria-label="Filter visible events"
-            placeholder="Filter visible events…"
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.preventDefault();
-                setSearch("");
-                e.currentTarget.blur();
-              }
-            }}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {search ? (
-            <button
-              className="icon-button"
-              aria-label="Clear search"
-              onClick={() => setSearch("")}
-            >
-              <X size={14} />
-            </button>
-          ) : (
-            <kbd>/</kbd>
-          )}
-        </div>
         <div ref={surfaceRef} className="calendar-surface" aria-busy={busy}>
           <div className="period-track">
             {periodPreview &&
@@ -1785,6 +1786,11 @@ export default function App() {
                 events={filtered}
                 calendars={calendars}
                 onEvent={(e, anchor) => setPreview({ event: e, anchor })}
+                onEdit={
+                  desktop && !Capacitor.isNativePlatform()
+                    ? openEdit
+                    : undefined
+                }
                 onExpandDay={(d, anchor) => {
                   setPreview(null);
                   setExpandedDay({ date: d, anchor });
@@ -1825,6 +1831,9 @@ export default function App() {
           calendars={calendars}
           onClose={closeExpanded}
           onEvent={(event, anchor) => setPreview({ event, anchor })}
+          onEdit={
+            desktop && !Capacitor.isNativePlatform() ? openEdit : undefined
+          }
           onOpenDay={() => {
             setDate(expandedDay.date);
             changeLayout("day");
@@ -1842,12 +1851,7 @@ export default function App() {
           onDelete={() => deleteEvent(preview.event)}
           onCopy={(destination) => copyEvent(preview.event, destination)}
           onClose={closePreview}
-          onEdit={() => {
-            setEditingEvent(preview.event);
-            setPreview(null);
-            setExpandedDay(null);
-            setPanel("event");
-          }}
+          onEdit={() => openEdit(preview.event)}
         />
       )}
       {notice && (
@@ -2142,6 +2146,42 @@ export default function App() {
             Enter opens focused events. You can disable single-key shortcuts in
             settings.
           </p>
+        </Panel>
+      )}
+      {panel === "find" && (
+        <Panel title="Filter visible events" onClose={close} wide>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              close();
+            }}
+          >
+            <label className="field">
+              Search titles, locations and descriptions
+              <input
+                autoFocus
+                aria-label="Filter visible events"
+                placeholder="Find in this view…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+            <p className="small muted" role="status">
+              {filtered.length} matching events in this view
+            </p>
+            <div className="filter-actions">
+              <button type="submit" className="primary-button">
+                Show results
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setSearch("")}
+              >
+                Clear filter
+              </button>
+            </div>
+          </form>
         </Panel>
       )}
       {panel === "palette" && (

@@ -4442,3 +4442,68 @@ button.tag-track {
   margin-top: 12px;
   line-height: 1.5;
 }
+
+/* Keep navigation directly below the brand; sections remember expansion. */
+.sidebar .create-button {
+  margin-top: 16px;
+}
+.filter-actions {
+  display: flex;
+  gap: 10px;
+}
+.active-event-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--soft);
+  color: var(--text);
+  padding: 5px 9px;
+  min-width: 0;
+  max-width: 160px;
+  margin-left: 8px;
+}
+.active-event-filter span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.active-event-filter svg {
+  flex: none;
+}
+@media (max-width: 760px) {
+  :root {
+    --mobile-top-inset: max(6px, env(safe-area-inset-top, 0px));
+  }
+  .topbar,
+  .native .topbar,
+  .topbar:has(.header-tag-countdowns),
+  .native .topbar:has(.header-tag-countdowns) {
+    height: calc(60px + var(--mobile-top-inset));
+    min-height: calc(60px + var(--mobile-top-inset));
+    padding-top: calc(10px + var(--mobile-top-inset));
+  }
+  .mobile-menu,
+  .native .mobile-menu {
+    top: calc(14px + var(--mobile-top-inset));
+  }
+  .sidebar .brand {
+    margin-top: calc(21px + var(--mobile-top-inset));
+    margin-bottom: 16px;
+  }
+  .drawer-close {
+    top: calc(20px + var(--mobile-top-inset));
+  }
+  .event-editor-topbar {
+    height: calc(61px + var(--mobile-top-inset));
+    padding-top: var(--mobile-top-inset);
+  }
+  .active-event-filter {
+    max-width: 65px;
+    padding: 5px;
+  }
+  .active-event-filter > svg:first-child {
+    display: none;
+  }
+}

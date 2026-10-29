@@ -960,7 +960,7 @@ app.delete("/api/subscriptions/:id", auth, (req, res) => {
   removeItem(req.session.accountId, "subscriptions", req.params.id);
   res.json({ ok: true });
 });
-app.get("/downloads/hypercal-debug.apk", (req, res) => {
+app.get(["/download", "/downloads/hypercal-debug.apk"], (req, res) => {
   res.download(
     resolve("dist/downloads/hypercal-debug.apk"),
     `HyperCal-${JSON.parse(readFileSync(resolve("package.json"), "utf8")).version}-debug.apk`,

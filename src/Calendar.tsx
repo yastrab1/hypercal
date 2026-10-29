@@ -1,3 +1,4 @@
+import { monthRange } from "./period.mjs";
 import { eventColor } from "./event-colors.mjs";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -28,11 +29,13 @@ export function CalendarCanvas({
   events,
   calendars,
   onEvent,
+  onEdit,
   onCreate,
   onDate,
   onExpandDay,
   readOnly = false,
 }: {
+  onEdit?: (event: CalendarEvent) => void;
   readOnly?: boolean;
   layout: Layout;
   date: Date;
@@ -43,6 +46,19 @@ export function CalendarCanvas({
   onDate: (d: Date, layout?: Layout) => void;
   onExpandDay: (date: Date, anchor: HTMLElement) => void;
 }) {
+  const [mobile, setMobile] = useState(
+    () => window.matchMedia("(max-width: 760px)").matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 760px)");
+    const update = () => setMobile(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  const edit = (event: CalendarEvent, ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    if (!readOnly && !event.readOnly) onEdit?.(event);
+  };
   const scroll = useRef<HTMLDivElement>(null);
   const monthRef = useRef<HTMLDivElement>(null);
   const [monthHeight, setMonthHeight] = useState(600);
@@ -68,6 +84,7 @@ export function CalendarCanvas({
         ev.stopPropagation();
         onEvent(e, ev.currentTarget);
       }}
+      onDoubleClick={(ev) => edit(e, ev)}
       title={`${e.title}${e.location ? " · " + e.location : ""}`}
     >
       <span className="event-dot" />
@@ -129,9 +146,8 @@ export function CalendarCanvas({
       </div>
     );
   if (layout === "month") {
-    const begin = startOfWeek(startOfMonth(date), { weekStartsOn: 1 });
-    const end = addDays(startOfWeek(endOfMonth(date), { weekStartsOn: 1 }), 6);
-    const days = eachDayOfInterval({ start: begin, end });
+    const { from: begin, to } = monthRange(date, mobile);
+    const days = eachDayOfInterval({ start: begin, end: addDays(to, -1) });
     return (
       <div className="month-view" ref={monthRef}>
         <div className="month-weekdays">
@@ -266,6 +282,7 @@ export function CalendarCanvas({
                         onClick={(ev) =>
                           onEvent(segment.event, ev.currentTarget)
                         }
+                        onDoubleClick={(ev) => edit(segment.event, ev)}
                         aria-label={`${segment.event.title}, ${format(eventDate(segment.event.start), "MMM d")} to ${format(new Date(+eventDate(segment.event.end) - 1), "MMM d")}`}
                       >
                         <span>
@@ -333,6 +350,7 @@ export function CalendarCanvas({
                 } as React.CSSProperties
               }
               onClick={(ev) => onEvent(segment.event, ev.currentTarget)}
+              onDoubleClick={(ev) => edit(segment.event, ev)}
             >
               {segment.event.title}
             </button>
@@ -434,6 +452,7 @@ export function CalendarCanvas({
                       } as React.CSSProperties
                     }
                     onClick={(ev) => onEvent(e, ev.currentTarget)}
+                    onDoubleClick={(ev) => edit(e, ev)}
                   >
                     <strong>{e.title}</strong>
                     <span>
