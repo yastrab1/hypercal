@@ -4507,3 +4507,325 @@ button.tag-track {
     display: none;
   }
 }
+
+/* Fast event capture keeps title, interpretation and submission together. */
+.smart-title {
+  position: relative;
+  min-width: 0;
+}
+.quick-entry-chips {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin: 0 0 10px 32px;
+}
+.quick-calendar-chip,
+.quick-date-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  color: var(--text);
+  font-size: 12px;
+}
+.quick-calendar-chip i,
+.calendar-autocomplete i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+.quick-date-chip {
+  color: var(--accent);
+}
+.quick-entry-help {
+  margin: 0 0 14px 32px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.calendar-autocomplete {
+  position: absolute;
+  z-index: 12;
+  top: 48px;
+  left: 32px;
+  right: 0;
+  max-height: min(260px, 40dvh);
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--chrome);
+  box-shadow: 0 8px 30px #10111445;
+}
+.calendar-autocomplete button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 9px 10px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  text-align: left;
+}
+.calendar-autocomplete button[aria-selected="true"],
+.calendar-autocomplete button:hover {
+  background: var(--hover);
+}
+.calendar-autocomplete button span {
+  flex: 1;
+}
+.calendar-autocomplete p {
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.quick-event-panel {
+  inset: 0;
+  width: min(580px, calc(100vw - 32px));
+  height: fit-content;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--chrome);
+}
+.quick-event-panel .panel-inner {
+  padding: 20px;
+}
+.quick-event-panel .panel-inner > header {
+  margin-bottom: 10px;
+}
+.quick-event-panel .panel-inner > header h2 {
+  font-size: 14px;
+  color: var(--muted);
+}
+.quick-event-panel .event-editor-topbar {
+  display: none;
+}
+.quick-event-panel .title-field,
+.quick-event-panel .quick-entry-chips,
+.quick-event-panel .quick-entry-help {
+  margin-left: 0;
+}
+.quick-event-panel .title-field input {
+  font-size: 20px;
+}
+.quick-event-panel .calendar-autocomplete {
+  left: 0;
+}
+.quick-event-panel .desktop-save {
+  display: inline-flex;
+}
+.quick-event-panel .form-actions {
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+.quick-more-details {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  padding: 7px 0;
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .quick-event-panel {
+    inset: auto 0 0;
+    margin: 0;
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - var(--mobile-top-inset));
+    border-radius: 22px 22px 0 0;
+    padding: 0 0 env(safe-area-inset-bottom, 0px);
+  }
+  .quick-event-panel .panel-inner {
+    padding: 14px 18px 18px;
+  }
+  .quick-event-panel .panel-inner::before {
+    content: "";
+    display: block;
+    width: 30px;
+    height: 4px;
+    background: var(--muted);
+    opacity: 0.5;
+    border-radius: 2px;
+    margin: 0 auto 10px;
+  }
+  .quick-event-panel .panel-inner > header {
+    margin-bottom: 4px;
+  }
+  .quick-event-panel .title-field input {
+    font-size: 21px;
+    min-height: 44px;
+  }
+  .quick-event-panel .quick-entry-help {
+    font-size: 10px;
+  }
+  .quick-event-panel .quick-calendar-chip,
+  .quick-event-panel .quick-date-chip {
+    min-height: 38px;
+    font-size: 12px;
+  }
+  .quick-event-panel .form-actions {
+    margin-top: 0;
+  }
+  .quick-event-panel .event-status {
+    margin-bottom: 8px;
+  }
+}
+
+.continuous-option small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.continuous-calendar {
+  height: 100%;
+  width: 100%;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.continuous-month {
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-snap-type: y mandatory;
+  scroll-padding-top: 36px;
+  touch-action: pan-y;
+}
+.continuous-month .month-view {
+  min-width: 0;
+  overflow: visible;
+  height: 100%;
+}
+.continuous-month .month-weekdays {
+  position: sticky;
+  top: 0;
+  height: 36px;
+  flex: 0 0 36px;
+  z-index: 5;
+  background: var(--paper);
+}
+.continuous-month .month-week {
+  scroll-snap-align: start;
+}
+.continuous-month .month-grid {
+  min-height: 0;
+  overflow: visible;
+}
+.continuous-week {
+  overflow-x: auto;
+  overflow-y: hidden;
+  touch-action: pan-x pan-y;
+}
+.continuous-week .time-calendar.time-week {
+  min-width: 0;
+  width: 100%;
+}
+.continuous-week .time-scroll {
+  overflow-x: hidden;
+}
+.continuous-week .timezone-label,
+.continuous-week .hour-labels,
+.continuous-week .all-day-connected > span {
+  position: sticky;
+  left: 0;
+  background: var(--paper);
+  z-index: 4;
+}
+.continuous-week .all-day-connected > span {
+  flex-shrink: 0;
+}
+.continuous-week .hour-labels {
+  z-index: 3;
+}
+/* Let the outer week scroller own both axes so the hour gutter can stay pinned. */
+.calendar-surface:has(.continuous-week),
+.continuous-week .time-calendar {
+  touch-action: pan-x pan-y;
+}
+.continuous-week {
+  overflow: auto;
+}
+.continuous-week .time-calendar {
+  height: auto;
+}
+.continuous-week .time-scroll {
+  overflow: visible;
+  flex: none;
+}
+.continuous-week .day-heading {
+  position: sticky;
+  top: 0;
+  height: 78px;
+  background: var(--paper);
+  z-index: 7;
+}
+.continuous-week .all-day-connected {
+  position: sticky;
+  top: 78px;
+  overflow: clip;
+  z-index: 6;
+}
+.continuous-week .timezone-label,
+.continuous-week .hour-labels,
+.continuous-week .all-day-connected > span {
+  background: var(--paper);
+}
+.continuous-month .date-number:not(.today) {
+  width: auto;
+  min-width: 26px;
+  padding-inline: 3px;
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .quick-event-panel .desktop-save kbd {
+    display: none;
+  }
+}
+.continuous-week .timezone-label {
+  align-self: stretch;
+  display: flex;
+  align-items: flex-end;
+  z-index: 8;
+}
+@media (max-width: 760px) {
+  .quick-keyboard-hint {
+    display: none;
+  }
+}
+/* Stable virtual space preserves trackpad inertia while dates are recycled. */
+.continuous-spacer {
+  position: relative;
+}
+.continuous-buffer {
+  position: absolute;
+  overflow-anchor: none;
+}
+.continuous-calendar {
+  overflow-anchor: none;
+  scroll-behavior: auto;
+}
+.continuous-week {
+  scroll-snap-type: x mandatory;
+  scroll-padding-left: 60px;
+}
+.continuous-week .day-label {
+  scroll-snap-align: start;
+}
+@media (max-width: 760px) {
+  .continuous-week {
+    scroll-padding-left: 36px;
+  }
+}

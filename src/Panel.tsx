@@ -11,7 +11,7 @@ export function Panel({
   onClose: () => void;
   children: React.ReactNode;
   wide?: boolean;
-  variant?: "event";
+  variant?: "event" | "quick-event";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -25,7 +25,7 @@ export function Panel({
   return (
     <dialog
       ref={ref}
-      className={`panel ${wide ? "palette" : ""} ${variant ? "event-panel" : ""}`}
+      className={`panel ${wide ? "palette" : ""} ${variant ? `${variant}-panel` : ""}`}
       onCancel={(e) => {
         e.preventDefault();
         onClose();

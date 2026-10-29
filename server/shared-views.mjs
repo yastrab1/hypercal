@@ -5,6 +5,7 @@ import { dataDir, getAccount } from "./store.mjs";
 import { allPages, normalizeEvent } from "./google.mjs";
 import { filterEvents } from "../src/domain.mjs";
 const definition = z.object({
+  continuousScroll: z.boolean().default(false),
   name: z.string().trim().min(1).max(60),
   layout: z.enum(["day", "week", "month", "year"]),
   include: z.string().max(500).default(""),
@@ -44,6 +45,7 @@ export function sharedInfo(v, user) {
     include: v.include,
     exclude: v.exclude,
     hideAllDay: v.hideAllDay,
+    continuousScroll: !!v.continuousScroll,
     isOwner: owner,
     members: Object.entries(v.members).map(([id, m]) => ({
       id,
@@ -381,7 +383,12 @@ export function registerSharedViews(app, auth, appUrl) {
     ensureUnchanged(v, store.publicView(req.params.token, "web"));
     res
       .set("Cache-Control", "no-store")
-      .json({ name: v.name, layout: v.layout, ...data });
+      .json({
+        name: v.name,
+        layout: v.layout,
+        continuousScroll: !!v.continuousScroll,
+        ...data,
+      });
   });
   app.get("/api/shared-links/:token/calendar.ics", async (req, res) => {
     const v = store.publicView(req.params.token, "ical");

@@ -1,3 +1,6 @@
+import { useEventStream } from "./useEventStream";
+import { mergeEventChunk, prefetchWindow } from "./event-stream.mjs";
+import { CalendarViewport } from "./CalendarViewport";
 import { RecurrenceDialog, type RecurrenceScope } from "./RecurrenceDialog";
 import { TagsSection, TagCountdowns } from "./TagsSection";
 import { cleanTags } from "./tags.mjs";
@@ -9,8 +12,15 @@ import {
   type SharedRoute,
 } from "./SharedSpace";
 import { NotificationDefaults } from "./NotificationPicker";
-import { monthRange, shiftPeriod } from "./period.mjs";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { continuousRange, monthRange, shiftPeriod } from "./period.mjs";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   addDays,
   addMonths,
@@ -235,6 +245,16 @@ export default function App() {
     ).map((c) => c.id),
   );
   const [date, setDate] = useState(new Date());
+  const [scrollFocus, setScrollFocus] = useState<Date | null>(null);
+  const approachDate = useCallback(
+    (next: Date) =>
+      startTransition(() =>
+        setScrollFocus((old) =>
+          old?.getTime() === next.getTime() ? old : next,
+        ),
+      ),
+    [],
+  );
   const [periodPreview, setPeriodPreview] = useState(false);
   const [layout, setLayout] = useState<Layout>(() =>
     stored<Layout>(
@@ -515,41 +535,102 @@ export default function App() {
     );
   }
   const active = views.find((v) => v.id === activeView);
+  const continuous =
+    !!active?.continuousScroll && ["month", "week"].includes(layout);
+  const bufferedRange = continuousRange(date, layout);
   const selection = active ? active.calendarIds : visible;
-  const from =
-    layout === "year"
+  const from = continuous
+    ? bufferedRange.from
+    : layout === "year"
       ? startOfYear(date)
       : startOfWeek(startOfMonth(date), { weekStartsOn: 1 });
-  const to =
-    layout === "year"
+  const to = continuous
+    ? bufferedRange.to
+    : layout === "year"
       ? addDays(endOfYear(date), 1)
       : layout === "month" && !desktop
         ? monthRange(date, true).to
         : addDays(endOfMonth(date), 8);
   const rangeKey = `${from.toISOString()}|${to.toISOString()}|${JSON.stringify([...selection].sort())}`;
-  const displayFrom =
-    layout === "day"
+  const displayFrom = continuous
+    ? from
+    : layout === "day"
       ? new Date(date.getFullYear(), date.getMonth(), date.getDate())
       : layout === "week"
         ? startOfWeek(date, { weekStartsOn: 1 })
         : from;
-  const displayTo =
-    layout === "day"
+  const displayTo = continuous
+    ? to
+    : layout === "day"
       ? addDays(displayFrom, 1)
       : layout === "week"
         ? addDays(displayFrom, 7)
         : layout === "year"
           ? startOfYear(addYears(date, 1))
           : monthRange(date, !desktop).to;
-  const filtered = filterEvents(
-    events.filter(
-      (e) =>
-        selection.includes(e.calendarId) &&
-        eventDate(e.start) < displayTo &&
-        eventDate(e.end) > displayFrom,
-    ),
-    active,
-    search,
+  const streamWindow = prefetchWindow(
+    scrollFocus || (layout === "month" ? monthRange(date).from : date),
+    layout,
+  );
+  const streamContext = `${accountId}|${activeView}|${JSON.stringify([...selection].sort())}`;
+  const eventStream = useEventStream({
+    enabled:
+      continuous &&
+      live &&
+      verified &&
+      online &&
+      !!accountId &&
+      dataAccount === accountId &&
+      selection.length > 0,
+    context: streamContext,
+    refresh,
+    window: streamWindow,
+    load: (chunk, signal) =>
+      api(
+        `/events?${new URLSearchParams({ from: chunk.from.toISOString(), to: chunk.to.toISOString(), calendars: JSON.stringify(selection) })}`,
+        { signal },
+      ),
+    onChunk: (batch, chunk) =>
+      setEvents((old) =>
+        mergeEventChunk(old, batch.events, chunk.from, chunk.to, selection),
+      ),
+    readCache: (chunk) => {
+      const data = calendarCache.readRange(
+        accountId!,
+        `stream:${JSON.stringify([...selection].sort())}:${chunk.key}`,
+      );
+      return data ? { events: data.events, warnings: [] } : null;
+    },
+    writeCache: (batch, chunk) =>
+      calendarCache.writeRange(
+        session!.user!,
+        `stream:${JSON.stringify([...selection].sort())}:${chunk.key}`,
+        batch.events,
+        batch.refreshedAt || new Date().toISOString(),
+      ),
+  });
+  const filtered = useMemo(
+    () =>
+      filterEvents(
+        events.filter(
+          (e) =>
+            selection.includes(e.calendarId) &&
+            (continuous ||
+              (eventDate(e.start) < displayTo &&
+                eventDate(e.end) > displayFrom)),
+        ),
+        active,
+        search,
+      ),
+    [
+      events,
+      active,
+      search,
+      selection,
+      continuous,
+      displayFrom.getTime(),
+      displayTo.getTime(),
+    ],
   );
   const nativePoll = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(
@@ -748,6 +829,10 @@ export default function App() {
       calendars.some((c) => c.source === "demo")
     )
       return;
+    if (continuous) {
+      setBusy(false);
+      return;
+    }
     const seq = ++generation.current;
     const saved = calendarCache.readRange(accountId, rangeKey);
     if (saved) {
@@ -802,6 +887,7 @@ export default function App() {
     rangeKey,
     refresh,
     calendars,
+    continuous,
   ]);
   useEffect(() => {
     const onVisible = () => {
@@ -838,11 +924,13 @@ export default function App() {
   useEffect(() => {
     if (live && verified && accountId === dataAccount && session?.user)
       calendarCache.writeMetadata(session.user, calendars, views);
-    else if (!live && verified) {
-      localStorage.setItem("hypercal.demo.events", JSON.stringify(events));
+    else if (!live && verified)
       localStorage.setItem("hypercal.demo.views", JSON.stringify(views));
-    }
-  }, [events, views, calendars, live, verified, accountId, dataAccount]);
+  }, [views, calendars, live, verified, accountId, dataAccount]);
+  useEffect(() => {
+    if (!live && verified)
+      localStorage.setItem("hypercal.demo.events", JSON.stringify(events));
+  }, [events, live, verified]);
   const move = useCallback(
     (step: number) => {
       setPreview(null);
@@ -853,7 +941,7 @@ export default function App() {
   );
   usePeriodGesture(
     surfaceRef,
-    !desktop && !sidebar && !panel && !preview && !expandedDay,
+    !continuous && !desktop && !sidebar && !panel && !preview && !expandedDay,
     move,
     setPeriodPreview,
   );
@@ -1266,6 +1354,7 @@ export default function App() {
           include: active?.include || "",
           exclude: active?.exclude || "",
           hideAllDay: active?.hideAllDay || false,
+          continuousScroll: !!active?.continuousScroll,
         }}
         onConnect={connectGoogle}
         onClose={() => {
@@ -1651,7 +1740,7 @@ export default function App() {
           )}
           <div className="mobile-header-actions">
             <SyncIndicator
-              busy={busy}
+              busy={busy || (continuous && eventStream.busy)}
               cached={usingCache}
               online={online}
               onRefresh={requestSync}
@@ -1688,7 +1777,7 @@ export default function App() {
               <Search size={20} />
             </button>
             <SyncIndicator
-              busy={busy}
+              busy={busy || (continuous && eventStream.busy)}
               cached={usingCache}
               online={online}
               onRefresh={requestSync}
@@ -1751,13 +1840,24 @@ export default function App() {
             </button>
           </div>
         )}
-        {warnings.length > 0 && (
+        {continuous && eventStream.error && (
           <div className="warning-banner" role="status">
-            <AlertCircle size={15} />
-            {warnings.join(" ")}
+            Some events could not load. Scrolling is still available.{" "}
+            {eventStream.error}
+            <button onClick={() => setRefresh((n) => n + 1)}>Retry</button>
           </div>
         )}
-        <div ref={surfaceRef} className="calendar-surface" aria-busy={busy}>
+        {(continuous ? eventStream.warnings : warnings).length > 0 && (
+          <div className="warning-banner" role="status">
+            <AlertCircle size={15} />
+            {(continuous ? eventStream.warnings : warnings).join(" ")}
+          </div>
+        )}
+        <div
+          ref={surfaceRef}
+          className="calendar-surface"
+          aria-busy={busy || (continuous && eventStream.busy)}
+        >
           <div className="period-track">
             {periodPreview &&
               [-1, 1].map((step) => (
@@ -1780,7 +1880,15 @@ export default function App() {
                 </div>
               ))}
             <div className="period-page period-current">
-              <CalendarCanvas
+              <CalendarViewport
+                key={`${activeView || "builtin"}:${layout}`}
+                continuous={continuous}
+                onApproach={approachDate}
+                onViewportDate={(next) => {
+                  setPreview(null);
+                  setExpandedDay(null);
+                  setDate(next);
+                }}
                 layout={layout}
                 date={date}
                 events={filtered}
@@ -1803,15 +1911,17 @@ export default function App() {
               />
             </div>
           </div>
-          {!busy && filtered.length === 0 && (
-            <div className="empty-note">
-              {search
-                ? "No events match your search."
-                : selection.length
-                  ? "A little breathing room. Click a time to add an event."
-                  : "Choose a calendar in the sidebar to see events."}
-            </div>
-          )}
+          {!busy &&
+            !(continuous && eventStream.busy) &&
+            filtered.length === 0 && (
+              <div className="empty-note">
+                {search
+                  ? "No events match your search."
+                  : selection.length
+                    ? "A little breathing room. Click a time to add an event."
+                    : "Choose a calendar in the sidebar to see events."}
+              </div>
+            )}
         </div>
         <button
           className="mobile-create-fab"
@@ -1871,7 +1981,7 @@ export default function App() {
       )}
       {panel === "event" && (
         <Panel
-          variant="event"
+          variant={editingEvent ? "event" : "quick-event"}
           title={
             editingEvent
               ? editingEvent.readOnly
@@ -2277,6 +2387,9 @@ function ViewEditor({
             include: String(f.get("include")),
             exclude: String(f.get("exclude")),
             hideAllDay: f.get("hideAllDay") === "on",
+            continuousScroll:
+              ["month", "week"].includes(viewLayout) &&
+              f.get("continuousScroll") === "on",
             isDefault: f.get("isDefault") === "on",
           });
         } catch (e) {
@@ -2324,6 +2437,24 @@ function ViewEditor({
           />
           Use as the default {labels[viewLayout].toLowerCase()} view
         </label>
+        {["month", "week"].includes(viewLayout) && (
+          <label className="checkbox-field continuous-option">
+            <input
+              type="checkbox"
+              name="continuousScroll"
+              defaultChecked={view?.continuousScroll}
+            />
+            <span>
+              Continuous scrolling{" "}
+              <small>
+                Experimental.{" "}
+                {viewLayout === "month"
+                  ? "Scroll vertically and snap to the nearest week row."
+                  : "Scroll horizontally through individual days, without returning to Monday."}
+              </small>
+            </span>
+          </label>
+        )}
         <span className="field-label">Include calendars</span>
         <div className="view-calendar-picker">
           {calendars.map((c) => (

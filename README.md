@@ -37,6 +37,12 @@ Tags are stored in Google event extended properties and in HyperCal iCalendar ex
 
 Click a date number in day, week or month view for its distance from today and its events. Clicking elsewhere in a month cell still opens the default day view. Double-click an editable event on the web to open its editor directly; single-click opens details. Ctrl/Cmd F or the “Filter visible events” command opens filtering without a permanent search row. Calendars and Tags start collapsed and remember expansion. Mobile months always show six weeks, with a small camera-safe toolbar inset. Keyboard shortcuts and Ctrl/Cmd K remain available.
 
+## Quick capture and continuous scrolling
+
+New events use a compact capture dialog (a bottom sheet on phones). Type `@` to fuzzy-find a writable calendar, then use the arrow keys and Enter to select it. Dates such as `tmrw`, `in 2 days`, `mon`, and `11.2` are interpreted before saving; the date chip shows the exact result. Numeric dates use day.month and the next occurrence when no year is supplied. Remove the date chip to keep the phrase as literal title text. **More details** opens times, tags, reminders and other fields. Existing event titles are edited literally.
+
+In the web view editor, enable **Continuous scrolling** for a month or week view. Months scroll vertically and settle onto week rows; weeks scroll horizontally through individual days. Nearby events load in the background, with cached ranges shown first. Scrolling keeps working while requests are pending. The setting also applies to that view on Android and when shared.
+
 ## Android download
 
 The release APK is a **debug build**, signed consistently across maintainer builds. It can update earlier debug installs signed with that identity. Installation and native behavior have not been tested on every Android device.

@@ -1,9 +1,11 @@
+import { SmartEventTitle } from "./SmartEventTitle";
+import { parseQuickDate, withoutDatePhrase } from "./quick-entry.mjs";
 import { cleanTags } from "./tags.mjs";
 import { NotificationPicker } from "./NotificationPicker";
 import { notificationFields } from "./notifications.mjs";
 import { defaultEventColors } from "./event-colors.mjs";
 import { useEffect, useRef, useState } from "react";
-import { addDays, format } from "date-fns";
+import { addDays, differenceInCalendarDays, format } from "date-fns";
 import {
   AlignLeft,
   Bell,
@@ -14,6 +16,7 @@ import {
   LoaderCircle,
   MapPin,
   Palette,
+  Plus,
   Repeat2,
   Trash2,
   X,
@@ -45,6 +48,12 @@ export function EventEditor({
   onDelete: (e: CalendarEvent) => Promise<void>;
   onClose: () => void;
 }) {
+  const [details, setDetails] = useState(!!event);
+  const [title, setTitle] = useState(event?.title || "");
+  const [literalDate, setLiteralDate] = useState(false);
+  const [today] = useState(() => new Date());
+  const quickDate =
+    !event && !literalDate ? parseQuickDate(title, today) : null;
   const [eventTags, setEventTags] = useState<string[]>(event?.tags || []);
   const [tagInput, setTagInput] = useState("");
   const [color, setColor] = useState(event?.color || "");
@@ -76,6 +85,28 @@ export function EventEditor({
     [endInput, setEndInput] = useState(
       format(event?.allDay ? addDays(end, -1) : end, "yyyy-MM-dd"),
     );
+  const effectiveStart = quickDate?.date || startInput;
+  const effectiveEnd = quickDate
+    ? format(
+        addDays(
+          new Date(quickDate.date + "T12:00:00"),
+          Math.max(
+            0,
+            differenceInCalendarDays(
+              new Date(endInput + "T12:00:00"),
+              new Date(startInput + "T12:00:00"),
+            ),
+          ),
+        ),
+        "yyyy-MM-dd",
+      )
+    : endInput;
+  const commitQuickDate = () => {
+    if (!quickDate) return;
+    setTitle(withoutDatePhrase(title, quickDate));
+    setStartInput(effectiveStart);
+    setEndInput(effectiveEnd);
+  };
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const calendar = calendars.find((c) => c.id === calendarId);
   const writable = calendars.filter((c) => !c.readOnly);
@@ -93,13 +124,20 @@ export function EventEditor({
     e.preventDefault();
     if (disabled) return;
     setError("");
+    const cleanTitle = event
+      ? title.trim()
+      : withoutDatePhrase(title, quickDate);
+    if (!cleanTitle) {
+      setError("Add an event title as well as a date.");
+      return;
+    }
     const f = new FormData(e.currentTarget);
     const s = allDay
-      ? startInput
-      : new Date(`${startInput}T${f.get("startTime")}`).toISOString();
+      ? effectiveStart
+      : new Date(`${effectiveStart}T${f.get("startTime")}`).toISOString();
     const t = allDay
-      ? format(addDays(new Date(endInput + "T12:00:00"), 1), "yyyy-MM-dd")
-      : new Date(`${endInput}T${f.get("endTime")}`).toISOString();
+      ? format(addDays(new Date(effectiveEnd + "T12:00:00"), 1), "yyyy-MM-dd")
+      : new Date(`${effectiveEnd}T${f.get("endTime")}`).toISOString();
     if (new Date(t) <= new Date(s)) {
       setError("End must be after start.");
       return;
@@ -110,7 +148,7 @@ export function EventEditor({
         {
           id: event?.id || "",
           calendarId,
-          title: String(f.get("title")).trim(),
+          title: cleanTitle,
           tags: cleanTags([...eventTags, ...tagInput.split(",")]),
           description: String(f.get("description")),
           location: String(f.get("location")),
@@ -179,266 +217,292 @@ export function EventEditor({
         </div>
       )}
       <fieldset disabled={disabled}>
-        <label className="field title-field">
-          <span className="sr-only">Event title</span>
-          <input
-            autoFocus
-            name="title"
-            placeholder="Add title"
-            required
-            maxLength={1024}
-            defaultValue={event?.title}
-          />
-        </label>
-        <div className="event-kind">Event</div>
-        <div className="event-editor-section event-calendar-row">
-          <span
-            className="calendar-color-marker"
-            style={{ background: calendar?.color }}
-          />
-          <label className="field">
-            <span className="sr-only">Calendar</span>
-            <select
-              aria-label="Calendar"
-              value={calendarId}
-              disabled={!!event}
-              onChange={(e) => setCalendarId(e.target.value)}
-            >
-              {(event
-                ? calendars.filter((c) => c.id === event.calendarId)
-                : writable
-              ).map((c) => (
-                <option value={c.id} key={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <small>{live ? email : "Demo calendar"}</small>
-          </label>
-        </div>
-        <div className="event-editor-section">
-          <label className="event-all-day">
-            <Clock size={20} />
-            <span>All-day</span>
-            <input
-              type="checkbox"
-              role="switch"
-              checked={allDay}
-              onChange={(e) => setAllDay(e.target.checked)}
+        <SmartEventTitle
+          value={title}
+          onChange={(value) => {
+            setTitle(value);
+            if (
+              parseQuickDate(value, today)?.phrase !==
+              parseQuickDate(title, today)?.phrase
+            )
+              setLiteralDate(false);
+          }}
+          calendars={calendars}
+          calendarId={calendarId}
+          onCalendar={setCalendarId}
+          date={quickDate}
+          onLiteralDate={() => setLiteralDate(true)}
+          smart={!event}
+          defaultDate={effectiveStart}
+          onDetails={() => setDetails(true)}
+        />
+        <div className="quick-event-details" hidden={!details}>
+          <div className="event-kind">Event</div>
+          <div className="event-editor-section event-calendar-row">
+            <span
+              className="calendar-color-marker"
+              style={{ background: calendar?.color }}
             />
-          </label>
-          <div className="event-datetime-row">
             <label className="field">
-              <span className="sr-only">Start date</span>
+              <span className="sr-only">Calendar</span>
+              <select
+                aria-label="Calendar"
+                value={calendarId}
+                disabled={!!event}
+                onChange={(e) => setCalendarId(e.target.value)}
+              >
+                {(event
+                  ? calendars.filter((c) => c.id === event.calendarId)
+                  : writable
+                ).map((c) => (
+                  <option value={c.id} key={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <small>{live ? email : "Demo calendar"}</small>
+            </label>
+          </div>
+          <div className="event-editor-section">
+            <label className="event-all-day">
+              <Clock size={20} />
+              <span>All-day</span>
               <input
-                aria-label="Start date"
-                required
-                type="date"
-                value={startInput}
-                onChange={(e) => {
-                  setStartInput(e.target.value);
-                  if (e.target.value > endInput) setEndInput(e.target.value);
+                type="checkbox"
+                role="switch"
+                checked={allDay}
+                onChange={(e) => setAllDay(e.target.checked)}
+              />
+            </label>
+            <div className="event-datetime-row">
+              <label className="field">
+                <span className="sr-only">Start date</span>
+                <input
+                  aria-label="Start date"
+                  required
+                  type="date"
+                  value={effectiveStart}
+                  onChange={(e) => {
+                    commitQuickDate();
+                    setStartInput(e.target.value);
+                    if (e.target.value > effectiveEnd)
+                      setEndInput(e.target.value);
+                  }}
+                />
+              </label>
+              {!allDay && (
+                <label className="field">
+                  <span className="sr-only">Start time</span>
+                  <input
+                    aria-label="Start time"
+                    required
+                    name="startTime"
+                    type="time"
+                    defaultValue={format(start, "HH:mm")}
+                  />
+                </label>
+              )}
+            </div>
+            <div className="event-datetime-row">
+              <label className="field">
+                <span className="sr-only">
+                  {allDay ? "Last day" : "End date"}
+                </span>
+                <input
+                  aria-label={allDay ? "Last day" : "End date"}
+                  required
+                  type="date"
+                  value={effectiveEnd}
+                  onChange={(e) => {
+                    commitQuickDate();
+                    setEndInput(e.target.value);
+                  }}
+                />
+              </label>
+              {!allDay && (
+                <label className="field">
+                  <span className="sr-only">End time</span>
+                  <input
+                    aria-label="End time"
+                    required
+                    name="endTime"
+                    type="time"
+                    defaultValue={format(end, "HH:mm")}
+                  />
+                </label>
+              )}
+            </div>
+            <div className="event-detail-row">
+              <Globe size={20} />
+              <span>{timezone}</span>
+            </div>
+            {!event && (
+              <label className="event-detail-row">
+                <Repeat2 size={20} />
+                <span className="sr-only">Repeats</span>
+                <select name="recurrence" aria-label="Repeats">
+                  <option value="none">Does not repeat</option>
+                  <option value="daily" disabled={!live}>
+                    Every day
+                  </option>
+                  <option value="weekly" disabled={!live}>
+                    Every week
+                  </option>
+                  <option value="monthly" disabled={!live}>
+                    Every month
+                  </option>
+                </select>
+              </label>
+            )}
+          </div>
+          <div className="event-editor-section">
+            <label className="event-detail-row">
+              <MapPin size={20} />
+              <span className="sr-only">Location</span>
+              <input
+                name="location"
+                aria-label="Location"
+                placeholder="Add location or meeting link"
+                defaultValue={event?.location}
+                maxLength={1024}
+              />
+            </label>
+          </div>
+          <div className="event-editor-section event-tag-section">
+            <span>Tags</span>
+            <div className="event-tag-options">
+              {[
+                ...tags,
+                ...eventTags
+                  .filter((name) => !tags.some((t) => t.name === name))
+                  .map((name) => ({ name, color: "#4b99d2", tracked: false })),
+              ].map((tag) => (
+                <label key={tag.name} className="event-tag-option">
+                  <input
+                    type="checkbox"
+                    checked={eventTags.includes(tag.name)}
+                    onChange={(e) =>
+                      setEventTags(
+                        e.target.checked
+                          ? [...eventTags, tag.name]
+                          : eventTags.filter((name) => name !== tag.name),
+                      )
+                    }
+                  />
+                  <i style={{ background: tag.color }} />
+                  {tag.name}
+                </label>
+              ))}
+            </div>
+            <label className="field">
+              New tags
+              <input
+                aria-label="New event tags"
+                placeholder="Separate tags with commas"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                maxLength={300}
+              />
+            </label>
+          </div>
+          <div className="event-editor-section event-color-section">
+            <div className="event-detail-row">
+              <Palette size={20} />
+              <span>Event color</span>
+            </div>
+            <div
+              className="event-color-options"
+              role="group"
+              aria-label="Event color"
+            >
+              <button
+                type="button"
+                className="color-default"
+                aria-pressed={!color}
+                onClick={() => setColor("")}
+              >
+                Calendar default
+              </button>
+              {defaultEventColors.map((c) => (
+                <button
+                  key={c.hex}
+                  type="button"
+                  className="color-swatch"
+                  style={{ background: c.hex }}
+                  aria-label={c.name}
+                  title={c.name}
+                  aria-pressed={color.toLowerCase() === c.hex}
+                  onClick={() => setColor(c.hex)}
+                >
+                  {color.toLowerCase() === c.hex && <Check size={17} />}
+                </button>
+              ))}
+            </div>
+            <label className="custom-event-color">
+              Custom color
+              <input
+                type="color"
+                aria-label="Custom event color"
+                value={
+                  /^#[\da-f]{6}$/i.test(color)
+                    ? color
+                    : calendar?.color || "#039be5"
+                }
+                onChange={(e) => setColor(e.target.value)}
+                onInput={(e) => setColor(e.currentTarget.value)}
+              />
+              <input
+                className="color-hex"
+                type="text"
+                aria-label="Custom color hex"
+                pattern="#[0-9a-fA-F]{6}"
+                placeholder="#039be5"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                maxLength={7}
+              />
+            </label>
+          </div>
+          <div className="event-editor-section">
+            <label className="event-detail-row">
+              <Bell size={20} />
+              <span className="sr-only">Notification</span>
+              <NotificationPicker
+                value={reminder}
+                onChange={(value) => {
+                  setReminder(value);
+                  setReminderChanged(true);
                 }}
               />
             </label>
-            {!allDay && (
-              <label className="field">
-                <span className="sr-only">Start time</span>
-                <input
-                  aria-label="Start time"
-                  required
-                  name="startTime"
-                  type="time"
-                  defaultValue={format(start, "HH:mm")}
-                />
-              </label>
-            )}
           </div>
-          <div className="event-datetime-row">
-            <label className="field">
-              <span className="sr-only">
-                {allDay ? "Last day" : "End date"}
-              </span>
-              <input
-                aria-label={allDay ? "Last day" : "End date"}
-                required
-                type="date"
-                value={endInput}
-                onChange={(e) => setEndInput(e.target.value)}
+          <div className="event-editor-section">
+            <label className="event-detail-row notes-row">
+              <AlignLeft size={20} />
+              <span className="sr-only">Notes</span>
+              <textarea
+                name="description"
+                aria-label="Notes"
+                rows={3}
+                placeholder="Add description"
+                defaultValue={event?.description}
+                maxLength={8000}
               />
             </label>
-            {!allDay && (
-              <label className="field">
-                <span className="sr-only">End time</span>
-                <input
-                  aria-label="End time"
-                  required
-                  name="endTime"
-                  type="time"
-                  defaultValue={format(end, "HH:mm")}
-                />
-              </label>
-            )}
           </div>
-          <div className="event-detail-row">
-            <Globe size={20} />
-            <span>{timezone}</span>
-          </div>
-          {!event && (
-            <label className="event-detail-row">
-              <Repeat2 size={20} />
-              <span className="sr-only">Repeats</span>
-              <select name="recurrence" aria-label="Repeats">
-                <option value="none">Does not repeat</option>
-                <option value="daily" disabled={!live}>
-                  Every day
-                </option>
-                <option value="weekly" disabled={!live}>
-                  Every week
-                </option>
-                <option value="monthly" disabled={!live}>
-                  Every month
-                </option>
-              </select>
-            </label>
-          )}
-        </div>
-        <div className="event-editor-section">
-          <label className="event-detail-row">
-            <MapPin size={20} />
-            <span className="sr-only">Location</span>
-            <input
-              name="location"
-              aria-label="Location"
-              placeholder="Add location or meeting link"
-              defaultValue={event?.location}
-              maxLength={1024}
-            />
-          </label>
-        </div>
-        <div className="event-editor-section event-tag-section">
-          <span>Tags</span>
-          <div className="event-tag-options">
-            {[
-              ...tags,
-              ...eventTags
-                .filter((name) => !tags.some((t) => t.name === name))
-                .map((name) => ({ name, color: "#4b99d2", tracked: false })),
-            ].map((tag) => (
-              <label key={tag.name} className="event-tag-option">
-                <input
-                  type="checkbox"
-                  checked={eventTags.includes(tag.name)}
-                  onChange={(e) =>
-                    setEventTags(
-                      e.target.checked
-                        ? [...eventTags, tag.name]
-                        : eventTags.filter((name) => name !== tag.name),
-                    )
-                  }
-                />
-                <i style={{ background: tag.color }} />
-                {tag.name}
-              </label>
-            ))}
-          </div>
-          <label className="field">
-            New tags
-            <input
-              aria-label="New event tags"
-              placeholder="Separate tags with commas"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              maxLength={300}
-            />
-          </label>
-        </div>
-        <div className="event-editor-section event-color-section">
-          <div className="event-detail-row">
-            <Palette size={20} />
-            <span>Event color</span>
-          </div>
-          <div
-            className="event-color-options"
-            role="group"
-            aria-label="Event color"
-          >
-            <button
-              type="button"
-              className="color-default"
-              aria-pressed={!color}
-              onClick={() => setColor("")}
-            >
-              Calendar default
-            </button>
-            {defaultEventColors.map((c) => (
-              <button
-                key={c.hex}
-                type="button"
-                className="color-swatch"
-                style={{ background: c.hex }}
-                aria-label={c.name}
-                title={c.name}
-                aria-pressed={color.toLowerCase() === c.hex}
-                onClick={() => setColor(c.hex)}
-              >
-                {color.toLowerCase() === c.hex && <Check size={17} />}
-              </button>
-            ))}
-          </div>
-          <label className="custom-event-color">
-            Custom color
-            <input
-              type="color"
-              aria-label="Custom event color"
-              value={
-                /^#[\da-f]{6}$/i.test(color)
-                  ? color
-                  : calendar?.color || "#039be5"
-              }
-              onChange={(e) => setColor(e.target.value)}
-              onInput={(e) => setColor(e.currentTarget.value)}
-            />
-            <input
-              className="color-hex"
-              type="text"
-              aria-label="Custom color hex"
-              pattern="#[0-9a-fA-F]{6}"
-              placeholder="#039be5"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              maxLength={7}
-            />
-          </label>
-        </div>
-        <div className="event-editor-section">
-          <label className="event-detail-row">
-            <Bell size={20} />
-            <span className="sr-only">Notification</span>
-            <NotificationPicker
-              value={reminder}
-              onChange={(value) => {
-                setReminder(value);
-                setReminderChanged(true);
-              }}
-            />
-          </label>
-        </div>
-        <div className="event-editor-section">
-          <label className="event-detail-row notes-row">
-            <AlignLeft size={20} />
-            <span className="sr-only">Notes</span>
-            <textarea
-              name="description"
-              aria-label="Notes"
-              rows={3}
-              placeholder="Add description"
-              defaultValue={event?.description}
-              maxLength={8000}
-            />
-          </label>
         </div>
       </fieldset>
+      {!event && (
+        <button
+          type="button"
+          className="quick-more-details"
+          aria-expanded={details}
+          onClick={() => setDetails(!details)}
+        >
+          <Plus size={17} />
+          {details ? "Fewer details" : "More details"}
+        </button>
+      )}
       {error && (
         <p className="form-error" role="alert">
           {error}

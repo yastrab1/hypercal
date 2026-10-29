@@ -1,10 +1,9 @@
+import { useEventStream } from "./useEventStream";
+import { mergeEventChunk, prefetchWindow } from "./event-stream.mjs";
+import { CalendarViewport } from "./CalendarViewport";
 import { usePeriodGesture } from "./usePeriodGesture";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  addMonths,
-  addYears,
-  format,
-} from "date-fns";
+import { addMonths, addYears, format } from "date-fns";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -19,7 +18,7 @@ import { api } from "./api";
 import { CalendarCanvas, onDay } from "./Calendar";
 import { EventPopover, DayOverflowPopover } from "./CalendarPopovers";
 import { Panel } from "./Panel";
-import { monthRange, shiftPeriod } from "./period.mjs";
+import { continuousRange, monthRange, shiftPeriod } from "./period.mjs";
 import type { Calendar, CalendarEvent, Layout } from "./types";
 export type SharedRoute = {
   kind: "hub" | "view" | "invite" | "public";
@@ -32,6 +31,7 @@ export interface SharedView {
   include: string;
   exclude: string;
   hideAllDay: boolean;
+  continuousScroll?: boolean;
   isOwner: boolean;
   members: {
     id: string;
@@ -81,6 +81,7 @@ export function SharedSpace({
     include: string;
     exclude: string;
     hideAllDay: boolean;
+    continuousScroll?: boolean;
   };
   onConnect: () => void;
   onClose: () => void;
@@ -92,11 +93,18 @@ export function SharedSpace({
     ),
     [inviteName, setInviteName] = useState(""),
     [joined, setJoined] = useState(false);
+  const [scrollFocus, setScrollFocus] = useState<Date | null>(null);
+  const approachDate = useCallback(
+    (next: Date) =>
+      setScrollFocus((old) => (old?.getTime() === next.getTime() ? old : next)),
+    [],
+  );
   const [date, setDate] = useState(new Date()),
     [layout, setLayout] = useState<Layout>("month");
   const [data, setData] = useState<{
     name?: string;
     layout?: Layout;
+    continuousScroll?: boolean;
     events: CalendarEvent[];
     calendars: Calendar[];
     warnings: string[];
@@ -117,6 +125,47 @@ export function SharedSpace({
     } | null>(null);
   const surfaceRef = useRef<HTMLDivElement>(null),
     publicLoaded = useRef(false);
+  const continuous =
+    ["month", "week"].includes(layout) &&
+    !!(route.kind === "public"
+      ? data.continuousScroll
+      : view?.continuousScroll);
+  const eventStream = useEventStream({
+    enabled:
+      continuous && (route.kind === "public" || (!!current && connected)),
+    context: `shared:${route.kind}:${route.id}:${current}`,
+    refresh,
+    window: prefetchWindow(
+      scrollFocus || (layout === "month" ? monthRange(date).from : date),
+      layout,
+    ),
+    load: (chunk, signal) =>
+      api(
+        `${route.kind === "public" ? `/shared-links/${encodeURIComponent(route.id!)}` : `/shared-views/${current}/events`}?${new URLSearchParams({ from: chunk.from.toISOString(), to: chunk.to.toISOString() })}`,
+        { signal },
+      ),
+    onChunk: (batch, chunk) =>
+      setData((old) => ({
+        ...old,
+        events: mergeEventChunk(
+          old.events,
+          batch.events,
+          chunk.from,
+          chunk.to,
+          [
+            ...new Set(
+              [...old.events, ...batch.events].map((e) => e.calendarId),
+            ),
+          ],
+        ),
+        calendars: batch.calendars || old.calendars,
+        warnings: batch.warnings,
+      })),
+  });
+  useEffect(() => {
+    if (continuous && eventStream.error)
+      setData((old) => ({ ...old, events: [], calendars: [] }));
+  }, [eventStream.error, continuous]);
   const move = useCallback(
     (step: number) => {
       setPreview(null);
@@ -172,7 +221,8 @@ export function SharedSpace({
   }, [manage, preview, expanded, publicMode, current, move, onClose]);
   usePeriodGesture(
     surfaceRef,
-    window.innerWidth <= 760 &&
+    !continuous &&
+      window.innerWidth <= 760 &&
       (publicMode || !!current) &&
       !manage &&
       !preview &&
@@ -213,11 +263,17 @@ export function SharedSpace({
   }, [current, connected, refresh]);
   useEffect(() => {
     if (!publicMode && (!current || !connected)) return;
+    if (continuous) {
+      setBusy(false);
+      return;
+    }
     let cancelled = false;
     setBusy(true);
     setError("");
     setPreview(null);
-    const { from, to } = monthRange(date, true);
+    const { from, to } = continuous
+      ? continuousRange(date, layout)
+      : monthRange(date, true);
     const query = new URLSearchParams({
       from: (layout === "year"
         ? new Date(date.getFullYear(), 0, 1)
@@ -261,7 +317,16 @@ export function SharedSpace({
       clearInterval(timer);
       document.removeEventListener("visibilitychange", visible);
     };
-  }, [publicMode, route.id, current, connected, date, layout, refresh]);
+  }, [
+    publicMode,
+    route.id,
+    current,
+    connected,
+    date,
+    layout,
+    refresh,
+    continuous,
+  ]);
   async function create(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -355,6 +420,12 @@ export function SharedSpace({
           </>
         )}
       </header>
+      {continuous && eventStream.error && (
+        <div className="warning-banner" role="status">
+          Events could not load. {eventStream.error}
+          <button onClick={() => setRefresh((n) => n + 1)}>Retry</button>
+        </div>
+      )}
       {error && (
         <div className="error-banner" role="alert">
           {error}
@@ -476,7 +547,7 @@ export function SharedSpace({
             </strong>
             <span>
               {publicMode ? "Read-only link" : "Shared view"}
-              {busy ? " · Syncing…" : ""}
+              {busy || (continuous && eventStream.busy) ? " · Syncing…" : ""}
             </span>
           </div>
           {data.warnings.map((w) => (
@@ -508,7 +579,14 @@ export function SharedSpace({
                   </div>
                 ))}
               <div className="period-page period-current">
-                <CalendarCanvas
+                <CalendarViewport
+                  continuous={continuous}
+                  onApproach={approachDate}
+                  onViewportDate={(next) => {
+                    setPreview(null);
+                    setExpanded(null);
+                    setDate(next);
+                  }}
                   readOnly
                   layout={layout}
                   date={date}
@@ -524,12 +602,15 @@ export function SharedSpace({
                 />
               </div>
             </div>
-            {!busy && !error && !data.events.length && (
-              <p className="shared-empty">
-                No shared events in this period. Contributors choose what to
-                share in view settings.
-              </p>
-            )}
+            {!busy &&
+              !(continuous && eventStream.busy) &&
+              !error &&
+              !data.events.length && (
+                <p className="shared-empty">
+                  No shared events in this period. Contributors choose what to
+                  share in view settings.
+                </p>
+              )}
           </div>
         </>
       )}
@@ -914,6 +995,7 @@ function SharedSettings({
                 include: f.get("include"),
                 exclude: f.get("exclude"),
                 hideAllDay: f.get("hideAllDay") === "on",
+                continuousScroll: f.get("continuousScroll") === "on",
               });
             }}
           >
@@ -934,6 +1016,20 @@ function SharedSettings({
                   <option key={l}>{l}</option>
                 ))}
               </select>
+            </label>
+            <label className="checkbox-field continuous-option">
+              <input
+                type="checkbox"
+                name="continuousScroll"
+                defaultChecked={view.continuousScroll}
+              />
+              <span>
+                Continuous scrolling{" "}
+                <small>
+                  Experimental. Month snaps by week row; week scrolls through
+                  individual days.
+                </small>
+              </span>
             </label>
             <label className="field">
               Only show matching

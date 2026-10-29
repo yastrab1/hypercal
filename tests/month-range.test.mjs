@@ -20,3 +20,14 @@ test("sixth-row events are fetched even for a February starting Monday", () => {
   assert.equal(format(to, "yyyy-MM-dd"), "2027-03-15");
   assert.equal(differenceInCalendarDays(monthRange(from).to, from), 28);
 });
+
+test("continuous buffers cover nearby dates without an annual fetch", async () => {
+  const { continuousRange } = await import("../src/period.mjs");
+  const anchor = new Date(2026, 9, 29);
+  for (const layout of ["month", "week"]) {
+    const { from, to } = continuousRange(anchor, layout);
+    assert.ok(from < anchor);
+    assert.ok(to > anchor);
+    assert.ok(differenceInCalendarDays(to, from) <= 370);
+  }
+});

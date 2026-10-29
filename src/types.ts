@@ -35,6 +35,7 @@ export interface CalendarEvent {
   htmlLink?: string;
 }
 export interface SavedView {
+  continuousScroll?: boolean;
   isDefault?: boolean;
   id: string;
   name: string;

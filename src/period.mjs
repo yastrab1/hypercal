@@ -5,6 +5,7 @@ import {
   startOfMonth,
   startOfWeek,
   endOfMonth,
+  startOfDay,
 } from "date-fns";
 export function shiftPeriod(date, layout, step) {
   return layout === "year"
@@ -21,4 +22,15 @@ export function monthRange(date, mobile = false) {
     ? addDays(from, 42)
     : addDays(startOfWeek(endOfMonth(date), { weekStartsOn: 1 }), 7);
   return { from, to };
+}
+
+export function continuousRange(date, layout) {
+  const anchor =
+    layout === "month"
+      ? startOfWeek(date, { weekStartsOn: 1 })
+      : startOfDay(date);
+  return {
+    from: addDays(anchor, layout === "month" ? -70 : -14),
+    to: addDays(anchor, layout === "month" ? 98 : 28),
+  };
 }

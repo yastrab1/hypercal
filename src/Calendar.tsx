@@ -30,12 +30,16 @@ export function CalendarCanvas({
   calendars,
   onEvent,
   onEdit,
+  monthWindow,
+  weekWindow,
   onCreate,
   onDate,
   onExpandDay,
   readOnly = false,
 }: {
   onEdit?: (event: CalendarEvent) => void;
+  monthWindow?: { start: Date; weeks: number };
+  weekWindow?: { start: Date; days: number };
   readOnly?: boolean;
   layout: Layout;
   date: Date;
@@ -146,7 +150,12 @@ export function CalendarCanvas({
       </div>
     );
   if (layout === "month") {
-    const { from: begin, to } = monthRange(date, mobile);
+    const { from: begin, to } = monthWindow
+      ? {
+          from: monthWindow.start,
+          to: addDays(monthWindow.start, monthWindow.weeks * 7),
+        }
+      : monthRange(date, mobile);
     const days = eachDayOfInterval({ start: begin, end: addDays(to, -1) });
     return (
       <div className="month-view" ref={monthRef}>
@@ -221,7 +230,10 @@ export function CalendarCanvas({
                         onClick={(e) => onExpandDay(day, e.currentTarget)}
                         aria-label={`Events and countdown for ${format(day, "MMMM d")}`}
                       >
-                        {format(day, "d")}
+                        {format(
+                          day,
+                          monthWindow && day.getDate() === 1 ? "MMM d" : "d",
+                        )}
                       </button>
                       <button
                         disabled={readOnly}
@@ -303,8 +315,11 @@ export function CalendarCanvas({
   const days =
     layout === "day"
       ? [date]
-      : Array.from({ length: 7 }, (_, i) =>
-          addDays(startOfWeek(date, { weekStartsOn: 1 }), i),
+      : Array.from({ length: weekWindow?.days || 7 }, (_, i) =>
+          addDays(
+            weekWindow?.start || startOfWeek(date, { weekStartsOn: 1 }),
+            i,
+          ),
         );
   return (
     <div
