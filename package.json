@@ -1,6 +1,6 @@
 {
   "name": "hypercal",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,12 @@
     "test": "node --test tests/*.test.mjs",
     "android:sync": "npm run build && cap sync android",
     "android:build": "npm run android:sync && (cd android && ./gradlew assembleDebug) && node scripts/package-android.mjs",
-    "android:package": "node scripts/package-android.mjs"
+    "android:package": "node scripts/package-android.mjs",
+    "perf:baseline": "node scripts/performance/baseline.mjs",
+    "perf:build": "vite build --config scripts/performance/vite.config.ts",
+    "perf:serve": "node scripts/performance/serve.mjs",
+    "perf:cache": "node scripts/performance/cache.mjs",
+    "perf:report": "node scripts/performance/report.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.0",

@@ -1,5 +1,9 @@
 import { useEventStream } from "./useEventStream";
-import { mergeEventChunk, prefetchWindow } from "./event-stream.mjs";
+import {
+  mergeEventChunk,
+  prefetchWindow,
+  reuseRecords,
+} from "./event-stream.mjs";
 import { CalendarViewport } from "./CalendarViewport";
 import { usePeriodGesture } from "./usePeriodGesture";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -158,7 +162,9 @@ export function SharedSpace({
             ),
           ],
         ),
-        calendars: batch.calendars || old.calendars,
+        calendars: batch.calendars
+          ? reuseRecords(old.calendars, batch.calendars)
+          : old.calendars,
         warnings: batch.warnings,
       })),
   });

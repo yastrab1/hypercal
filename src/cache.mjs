@@ -2,9 +2,16 @@ const PREFIX = "hypercal.cache.v1.";
 const MAX_AGE = 14 * 86400000;
 const MAX_RANGES = 6;
 export function createCalendarCache(storage, now = Date.now) {
+  const decoded = new Map();
   const read = (key) => {
     try {
-      return JSON.parse(storage.getItem(key) || "null");
+      const raw = storage.getItem(key) || "null";
+      const previous = decoded.get(key);
+      if (previous?.raw === raw) return previous.value;
+      const value = JSON.parse(raw);
+      decoded.set(key, { raw, value });
+      if (decoded.size > 2) decoded.delete(decoded.keys().next().value);
+      return value;
     } catch {
       return null;
     }
@@ -12,6 +19,7 @@ export function createCalendarCache(storage, now = Date.now) {
   const write = (key, value) => {
     try {
       storage.setItem(key, JSON.stringify(value));
+      decoded.delete(key);
       return true;
     } catch {
       return false;
@@ -30,7 +38,7 @@ export function createCalendarCache(storage, now = Date.now) {
       !Number.isFinite(data.updatedAt)
     )
       return null;
-    data.ranges = Object.fromEntries(
+    const ranges = Object.fromEntries(
       Object.entries(data.ranges).filter(
         ([, range]) =>
           range &&
@@ -40,7 +48,7 @@ export function createCalendarCache(storage, now = Date.now) {
           now() - range.savedAt < MAX_AGE,
       ),
     );
-    return data;
+    return { ...data, ranges };
   };
   const save = (data) => {
     if (!write(PREFIX + data.user.id, data)) {
@@ -89,6 +97,7 @@ export function createCalendarCache(storage, now = Date.now) {
       }
     },
     forget() {
+      decoded.clear();
       try {
         for (let i = storage.length - 1; i >= 0; i--) {
           const key = storage.key(i);

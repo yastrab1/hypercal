@@ -1,3 +1,4 @@
+import { createSingleFlight } from "./singleflight.mjs";
 import { applyTagAliases } from "./tag-aliases.mjs";
 import { readEventTags } from "./tags.mjs";
 import { readEventColor } from "../src/event-colors.mjs";
@@ -48,15 +49,31 @@ export async function googleRequest(
   { method = "GET", body, etag } = {},
 ) {
   const client = await clientFor(id);
-  const result = await client.request({
-    url: `https://www.googleapis.com/calendar/v3/${path}`,
-    method,
-    data: body,
-    headers: etag ? { "If-Match": etag } : undefined,
-  });
-  return result.data;
+  const mutation = method.toUpperCase() !== "GET";
+  const prefix = JSON.stringify([id]).slice(0, -1) + ",";
+  const invalidate = () =>
+    concurrentReads.invalidate((key) => key.startsWith(prefix));
+  if (mutation) invalidate();
+  try {
+    const result = await client.request({
+      url: `https://www.googleapis.com/calendar/v3/${path}`,
+      method,
+      data: body,
+      headers: etag ? { "If-Match": etag } : undefined,
+    });
+    return result.data;
+  } finally {
+    // A refresh after a write must not join a read started before/during it.
+    if (mutation) invalidate();
+  }
 }
-export async function allPages(id, path) {
+const concurrentReads = createSingleFlight();
+export function allPages(id, path) {
+  return concurrentReads(JSON.stringify([id, path]), () =>
+    loadAllPages(id, path),
+  );
+}
+async function loadAllPages(id, path) {
   let items = [],
     pageToken;
   do {

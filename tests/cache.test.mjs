@@ -114,3 +114,21 @@ test("fresh metadata does not resurrect expired ranges on offline startup", () =
   );
   assert.equal(cache.readLast(), null);
 });
+
+test("decoded snapshots observe external storage changes and never retain private data after sign-out", () => {
+  const storage = memory(),
+    cache = createCalendarCache(storage);
+  cache.writeMetadata(alice, [], []);
+  cache.writeRange(alice, "range", [{ id: "one" }], "now");
+  assert.equal(cache.readRange(alice.id, "range").events[0].id, "one");
+  const key = "hypercal.cache.v1.alice",
+    data = JSON.parse(storage.getItem(key));
+  data.ranges.range.events = [{ id: "updated-in-another-tab" }];
+  storage.setItem(key, JSON.stringify(data));
+  assert.equal(
+    cache.readRange(alice.id, "range").events[0].id,
+    "updated-in-another-tab",
+  );
+  cache.forget();
+  assert.equal(cache.readAccount(alice.id), null);
+});

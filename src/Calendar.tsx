@@ -1,42 +1,32 @@
 import { monthRange } from "./period.mjs";
-import { eventColor } from "./event-colors.mjs";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import {
   addDays,
-  eachDayOfInterval,
   endOfMonth,
   format,
-  isSameDay,
-  isSameMonth,
   startOfDay,
   startOfMonth,
   startOfWeek,
   differenceInCalendarDays,
 } from "date-fns";
 import type { Calendar, CalendarEvent, Layout } from "./types";
-import { layoutEvents, spansDays, weekSegments } from "./domain.mjs";
+import { weekSegments } from "./domain.mjs";
+import {
+  calendarDay,
+  createCalendarIndex,
+  dateForDay,
+  type CalendarIndex,
+  type CalendarDayBucket,
+  type CalendarWeekBucket,
+} from "./calendar-index.mjs";
 export function eventDate(value: string) {
-  return value.length === 10 ? new Date(value + "T00:00:00") : new Date(value);
+  return new Date(value.length === 10 ? value + "T00:00:00" : value);
 }
 export function onDay(e: CalendarEvent, date: Date) {
   const from = startOfDay(date);
-  const to = addDays(from, 1);
-  return eventDate(e.start) < to && eventDate(e.end) > from;
+  return eventDate(e.start) < addDays(from, 1) && eventDate(e.end) > from;
 }
-export function CalendarCanvas({
-  layout,
-  date,
-  events,
-  calendars,
-  onEvent,
-  onEdit,
-  monthWindow,
-  weekWindow,
-  onCreate,
-  onDate,
-  onExpandDay,
-  readOnly = false,
-}: {
+interface Props {
   onEdit?: (event: CalendarEvent) => void;
   monthWindow?: { start: Date; weeks: number };
   weekWindow?: { start: Date; days: number };
@@ -49,28 +39,70 @@ export function CalendarCanvas({
   onCreate: (d: Date) => void;
   onDate: (d: Date, layout?: Layout) => void;
   onExpandDay: (date: Date, anchor: HTMLElement) => void;
-}) {
+}
+type Actions = Pick<
+  Props,
+  "onEvent" | "onCreate" | "onDate" | "onExpandDay"
+> & { edit: (event: CalendarEvent, ev: React.MouseEvent) => void };
+type Color = (event: CalendarEvent) => string;
+export function CalendarCanvas(props: Props) {
+  const {
+    layout,
+    date,
+    events,
+    calendars,
+    monthWindow,
+    weekWindow,
+    readOnly = false,
+  } = props;
   const [mobile, setMobile] = useState(
-    () => window.matchMedia("(max-width: 760px)").matches,
+    () => matchMedia("(max-width: 760px)").matches,
   );
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 760px)");
+    const media = matchMedia("(max-width: 760px)");
     const update = () => setMobile(media.matches);
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
-  const edit = (event: CalendarEvent, ev: React.MouseEvent) => {
-    ev.stopPropagation();
-    if (!readOnly && !event.readOnly) onEdit?.(event);
-  };
-  const scroll = useRef<HTMLDivElement>(null);
-  const monthRef = useRef<HTMLDivElement>(null);
+  const latest = useRef(props);
+  latest.current = props;
+  const actions = useMemo<Actions>(
+    () => ({
+      onEvent: (...args) => latest.current.onEvent(...args),
+      onCreate: (...args) => latest.current.onCreate(...args),
+      onDate: (...args) => latest.current.onDate(...args),
+      onExpandDay: (...args) => latest.current.onExpandDay(...args),
+      edit: (event, ev) => {
+        ev.stopPropagation();
+        if (!latest.current.readOnly && !event.readOnly)
+          latest.current.onEdit?.(event);
+      },
+    }),
+    [],
+  );
+  const previous = useRef<CalendarIndex | undefined>(undefined);
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const index = useMemo(() => {
+    const next = createCalendarIndex(events, previous.current, timeZone);
+    previous.current = next;
+    return next;
+  }, [events, timeZone]);
+  const palette = useMemo(
+    () => new Map(calendars.map((c) => [c.id, c.color])),
+    [calendars],
+  );
+  const color = useCallback<Color>(
+    (e) => e.color || palette.get(e.calendarId) || "#039be5",
+    [palette],
+  );
+  const scroll = useRef<HTMLDivElement>(null),
+    monthRef = useRef<HTMLDivElement>(null);
   const [monthHeight, setMonthHeight] = useState(600);
   useEffect(() => {
     const el = monthRef.current;
     if (!el) return;
-    const observer = new ResizeObserver((entries) =>
-      setMonthHeight(entries[0].contentRect.height),
+    const observer = new ResizeObserver(([entry]) =>
+      setMonthHeight(entry.contentRect.height),
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -78,85 +110,49 @@ export function CalendarCanvas({
   useEffect(() => {
     if (scroll.current) scroll.current.scrollTop = 7 * 64;
   }, [layout]);
-  const color = (e: CalendarEvent) => eventColor(e, calendars);
-  const eventButton = (e: CalendarEvent, compact = false) => (
-    <button
-      key={`${e.calendarId}:${e.id}`}
-      className={`event-chip ${compact ? "compact" : ""} ${e.allDay ? "all-day" : ""}`}
-      style={{ "--event-color": color(e) } as React.CSSProperties}
-      onClick={(ev) => {
-        ev.stopPropagation();
-        onEvent(e, ev.currentTarget);
-      }}
-      onDoubleClick={(ev) => edit(e, ev)}
-      title={`${e.title}${e.location ? " · " + e.location : ""}`}
-    >
-      <span className="event-dot" />
-      {!e.allDay && <time>{format(eventDate(e.start), "HH:mm")}</time>}
-      <span>{e.title}</span>
-    </button>
-  );
+  const now = new Date(),
+    today = calendarDay(now),
+    selected = calendarDay(date);
   if (layout === "year")
     return (
       <div className="year-grid">
-        {Array.from({ length: 12 }, (_, m) => {
-          const month = new Date(date.getFullYear(), m, 1);
-          const begin = startOfWeek(month, { weekStartsOn: 1 });
+        {Array.from({ length: 12 }, (_, month) => {
+          const d = new Date(date.getFullYear(), month, 1),
+            begin = startOfWeek(d, { weekStartsOn: 1 });
+          const count =
+            35 + (differenceInCalendarDays(endOfMonth(d), begin) > 34 ? 7 : 0);
+          const buckets = Array.from({ length: count }, (_, i) =>
+            index.day(calendarDay(begin) + i),
+          );
           return (
-            <section key={m} className="mini-month">
-              <button
-                className="month-title"
-                onClick={() => onDate(month, "month")}
-              >
-                {format(month, "MMMM")}
-              </button>
-              <div className="mini-grid">
-                {["M", "T", "W", "T", "F", "S", "S"].map((x, i) => (
-                  <span key={"h" + i} className="mini-weekday">
-                    {x}
-                  </span>
-                ))}
-                {Array.from(
-                  {
-                    length:
-                      35 +
-                      (differenceInCalendarDays(endOfMonth(month), begin) > 34
-                        ? 7
-                        : 0),
-                  },
-                  (_, i) => {
-                    const day = addDays(begin, i);
-                    const es = events.filter((e) => onDay(e, day));
-                    return (
-                      <button
-                        key={i}
-                        disabled={!isSameMonth(day, month)}
-                        className={`${isSameDay(day, new Date()) ? "today " : ""}${es.length ? "has-events" : ""}`}
-                        onClick={() => onDate(day, "day")}
-                        aria-label={`${format(day, "EEEE, MMMM d")}, ${es.length} events`}
-                      >
-                        {format(day, "d")}
-                        {es.length > 0 && (
-                          <i style={{ background: color(es[0]) }} />
-                        )}
-                      </button>
-                    );
-                  },
-                )}
-              </div>
-            </section>
+            <YearMonth
+              key={month}
+              year={date.getFullYear()}
+              month={month}
+              buckets={buckets}
+              today={today}
+              color={color}
+              actions={actions}
+            />
           );
         })}
       </div>
     );
   if (layout === "month") {
-    const { from: begin, to } = monthWindow
+    const range = monthWindow
       ? {
           from: monthWindow.start,
           to: addDays(monthWindow.start, monthWindow.weeks * 7),
         }
       : monthRange(date, mobile);
-    const days = eachDayOfInterval({ start: begin, end: addDays(to, -1) });
+    const weeks = differenceInCalendarDays(range.to, range.from) / 7;
+    const capacity = Math.max(
+      1,
+      Math.floor(
+        ((monthHeight - 36) / weeks - (mobile ? 27 : 32) - 18) /
+          (mobile ? 16 : 22),
+      ),
+    );
     return (
       <div className="month-view" ref={monthRef}>
         <div className="month-weekdays">
@@ -174,153 +170,40 @@ export function CalendarCanvas({
         </div>
         <div
           className="month-grid connected-month"
-          style={{
-            gridTemplateRows: `repeat(${days.length / 7}, minmax(0,1fr))`,
-          }}
+          style={{ gridTemplateRows: `repeat(${weeks},minmax(0,1fr))` }}
         >
-          {Array.from({ length: days.length / 7 }, (_, week) => {
-            const weekDays = days.slice(week * 7, week * 7 + 7);
-            const ribbons = weekSegments(
-              events.filter((e) => e.allDay || spansDays(e)),
-              weekDays[0],
-            );
-            const lanes = ribbons.reduce((n, s) => Math.max(n, s.lane + 1), 0);
-            const compact = window.innerWidth <= 760;
-            const capacity = Math.max(
-              1,
-              Math.floor(
-                ((monthHeight - 36) / (days.length / 7) -
-                  (compact ? 27 : 32) -
-                  18) /
-                  (compact ? 16 : 22),
-              ),
-            );
-            const visibleLanes = Math.min(lanes, capacity);
-            return (
-              <div
-                className="month-week"
-                key={weekDays[0].toISOString()}
-                style={
-                  { "--ribbon-lanes": visibleLanes } as React.CSSProperties
-                }
-              >
-                {weekDays.map((day) => {
-                  const es = events
-                    .filter((e) => !e.allDay && !spansDays(e) && onDay(e, day))
-                    .sort((a, b) => a.start.localeCompare(b.start));
-                  const remaining = Math.max(0, capacity - visibleLanes);
-                  const hidden =
-                    ribbons.filter(
-                      (segment) =>
-                        segment.lane >= visibleLanes &&
-                        weekDays.indexOf(day) >= segment.start &&
-                        weekDays.indexOf(day) < segment.end,
-                    ).length + Math.max(0, es.length - remaining);
-                  return (
-                    <div
-                      key={day.toISOString()}
-                      className={`month-cell ${!isSameMonth(day, date) ? "outside" : ""}`}
-                      onClick={(ev) => {
-                        if (!(ev.target as HTMLElement).closest("button"))
-                          onDate(day, "day");
-                      }}
-                    >
-                      <button
-                        className={`date-number ${isSameDay(day, new Date()) ? "today" : ""}`}
-                        onClick={(e) => onExpandDay(day, e.currentTarget)}
-                        aria-label={`Events and countdown for ${format(day, "MMMM d")}`}
-                      >
-                        {format(
-                          day,
-                          monthWindow && day.getDate() === 1 ? "MMM d" : "d",
-                        )}
-                      </button>
-                      <button
-                        disabled={readOnly}
-                        className="cell-create"
-                        aria-label={`Create event on ${format(day, "MMMM d")}`}
-                        onClick={() => onCreate(day)}
-                      >
-                        +
-                      </button>
-                      <div
-                        className="month-events"
-                        style={{
-                          paddingTop: `calc(${visibleLanes} * var(--ribbon-step))`,
-                        }}
-                      >
-                        {es
-                          .slice(0, remaining)
-                          .map((e) => eventButton(e, true))}
-                        {hidden > 0 && (
-                          <button
-                            className="more-events"
-                            aria-label={`Show all events on ${format(day, "MMMM d")}`}
-                            onClick={(ev) =>
-                              onExpandDay(
-                                day,
-                                ev.currentTarget.closest(
-                                  ".month-cell",
-                                ) as HTMLElement,
-                              )
-                            }
-                          >
-                            +{hidden} more
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                <div
-                  className="ribbon-layer"
-                  style={{
-                    gridTemplateRows: `repeat(${visibleLanes},var(--ribbon-height))`,
-                  }}
-                >
-                  {ribbons
-                    .filter((segment) => segment.lane < visibleLanes)
-                    .map((segment) => (
-                      <button
-                        key={`${segment.event.calendarId}:${segment.event.id}`}
-                        className={`calendar-ribbon ${segment.continuesBefore ? "continues-before" : ""} ${segment.continuesAfter ? "continues-after" : ""}`}
-                        style={
-                          {
-                            gridColumn: `${segment.start + 1} / ${segment.end + 1}`,
-                            gridRow: segment.lane + 1,
-                            "--event-color": color(segment.event),
-                          } as React.CSSProperties
-                        }
-                        onClick={(ev) =>
-                          onEvent(segment.event, ev.currentTarget)
-                        }
-                        onDoubleClick={(ev) => edit(segment.event, ev)}
-                        aria-label={`${segment.event.title}, ${format(eventDate(segment.event.start), "MMM d")} to ${format(new Date(+eventDate(segment.event.end) - 1), "MMM d")}`}
-                      >
-                        <span>
-                          {!segment.event.allDay &&
-                            `${format(eventDate(segment.event.start), "HH:mm")} `}
-                          {segment.event.title}
-                        </span>
-                      </button>
-                    ))}
-                </div>
-              </div>
-            );
-          })}
+          {Array.from({ length: weeks }, (_, i) => (
+            <MonthWeek
+              key={monthWindow ? calendarDay(range.from) + i * 7 : i}
+              week={index.week(calendarDay(range.from) + i * 7)}
+              month={date.getFullYear() * 12 + date.getMonth()}
+              today={today}
+              capacity={capacity}
+              readOnly={readOnly}
+              showMonth={!!monthWindow}
+              color={color}
+              actions={actions}
+            />
+          ))}
         </div>
       </div>
     );
   }
-  const days =
+  const first =
     layout === "day"
-      ? [date]
-      : Array.from({ length: weekWindow?.days || 7 }, (_, i) =>
-          addDays(
-            weekWindow?.start || startOfWeek(date, { weekStartsOn: 1 }),
-            i,
-          ),
+      ? selected
+      : calendarDay(
+          weekWindow?.start || startOfWeek(date, { weekStartsOn: 1 }),
         );
+  const days = Array.from(
+    { length: layout === "day" ? 1 : weekWindow?.days || 7 },
+    (_, i) => index.day(first + i),
+  );
+  const ribbons = weekSegments(
+    index.allDay(first, days.length),
+    dateForDay(first),
+    days.length,
+  );
   return (
     <div
       className={`time-calendar time-${layout}`}
@@ -330,15 +213,13 @@ export function CalendarCanvas({
         <div className="timezone-label">
           GMT{format(date, "xxx").slice(0, 3)}
         </div>
-        {days.map((d) => (
-          <button
-            key={d.toISOString()}
-            className={`day-label ${isSameDay(d, new Date()) ? "current" : ""}`}
-            onClick={(e) => onExpandDay(d, e.currentTarget)}
-          >
-            <span>{format(d, "EEE")}</span>
-            <strong>{format(d, "d")}</strong>
-          </button>
+        {days.map((d, i) => (
+          <DayHeading
+            key={weekWindow ? d.number : i}
+            day={d}
+            today={today}
+            actions={actions}
+          />
         ))}
       </div>
       <div className="all-day-connected">
@@ -349,26 +230,13 @@ export function CalendarCanvas({
             gridTemplateColumns: `repeat(${days.length},minmax(0,1fr))`,
           }}
         >
-          {weekSegments(
-            events.filter((e) => e.allDay),
-            days[0],
-            days.length,
-          ).map((segment) => (
-            <button
+          {ribbons.map((segment) => (
+            <Ribbon
               key={`${segment.event.calendarId}:${segment.event.id}`}
-              className={`calendar-ribbon ${segment.continuesBefore ? "continues-before" : ""} ${segment.continuesAfter ? "continues-after" : ""}`}
-              style={
-                {
-                  gridColumn: `${segment.start + 1}/${segment.end + 1}`,
-                  gridRow: segment.lane + 1,
-                  "--event-color": color(segment.event),
-                } as React.CSSProperties
-              }
-              onClick={(ev) => onEvent(segment.event, ev.currentTarget)}
-              onDoubleClick={(ev) => edit(segment.event, ev)}
-            >
-              {segment.event.title}
-            </button>
+              segment={segment}
+              color={color}
+              actions={actions}
+            />
           ))}
         </div>
       </div>
@@ -381,119 +249,373 @@ export function CalendarCanvas({
               </span>
             ))}
           </div>
-          {days.map((d) => {
-            const timed = events
-              .filter((e) => !e.allDay && onDay(e, d))
-              .map((e) => {
-                const start = eventDate(e.start),
-                  end = eventDate(e.end);
-                return {
-                  ...e,
-                  startMinute: isSameDay(start, d)
-                    ? start.getHours() * 60 + start.getMinutes()
-                    : 0,
-                  endMinute: isSameDay(end, d)
-                    ? end.getHours() * 60 + end.getMinutes()
-                    : 1440,
-                };
-              });
-            const positioned = layoutEvents(timed);
-            const now = new Date();
-            return (
-              <div
-                key={d.toISOString()}
-                className={`day-column ${isSameDay(d, now) ? "is-today" : ""}`}
-              >
-                {Array.from({ length: 24 }, (_, h) => (
-                  <button
-                    key={h}
-                    disabled={readOnly}
-                    className="hour-slot"
-                    tabIndex={h === 9 && isSameDay(d, date) ? 0 : -1}
-                    data-day={format(d, "yyyy-MM-dd")}
-                    data-hour={h}
-                    onKeyDown={(ev) => {
-                      if (
-                        ![
-                          "ArrowUp",
-                          "ArrowDown",
-                          "ArrowLeft",
-                          "ArrowRight",
-                          "Home",
-                          "End",
-                        ].includes(ev.key)
-                      )
-                        return;
-                      ev.preventDefault();
-                      ev.stopPropagation();
-                      let day = new Date(d),
-                        hour = h;
-                      if (ev.key === "ArrowUp") hour = Math.max(0, h - 1);
-                      if (ev.key === "ArrowDown") hour = Math.min(23, h + 1);
-                      if (ev.key === "ArrowLeft") day = addDays(d, -1);
-                      if (ev.key === "ArrowRight") day = addDays(d, 1);
-                      if (ev.key === "Home") hour = 0;
-                      if (ev.key === "End") hour = 23;
-                      const target = ev.currentTarget
-                        .closest(".time-body")
-                        ?.querySelector<HTMLButtonElement>(
-                          `[data-day="${format(day, "yyyy-MM-dd")}"][data-hour="${hour}"]`,
-                        );
-                      if (target) target.focus();
-                    }}
-                    style={{ top: h * 64 }}
-                    aria-label={`Create event ${format(d, "EEEE MMMM d")} at ${h}:00`}
-                    onClick={() => {
-                      const n = new Date(d);
-                      n.setHours(h, 0, 0, 0);
-                      onCreate(n);
-                    }}
-                  />
-                ))}
-                {positioned.map((e) => (
-                  <button
-                    key={`${e.calendarId}:${e.id}`}
-                    className="time-event"
-                    style={
-                      {
-                        top: (e.top / 60) * 64,
-                        height: Math.max(
-                          25,
-                          ((e.bottom - e.top) / 60) * 64 - 3,
-                        ),
-                        left: `calc(${(e.column / e.columns) * 100}% + 3px)`,
-                        width: `calc(${100 / e.columns}% - 6px)`,
-                        "--event-color": color(e),
-                      } as React.CSSProperties
-                    }
-                    onClick={(ev) => onEvent(e, ev.currentTarget)}
-                    onDoubleClick={(ev) => edit(e, ev)}
-                  >
-                    <strong>{e.title}</strong>
-                    <span>
-                      {format(eventDate(e.start), "HH:mm")} –{" "}
-                      {format(eventDate(e.end), "HH:mm")}
-                    </span>
-                    {e.location && (
-                      <span className="event-location">{e.location}</span>
-                    )}
-                  </button>
-                ))}
-                {isSameDay(d, now) && (
-                  <div
-                    className="now-line"
-                    style={{
-                      top: ((now.getHours() * 60 + now.getMinutes()) / 60) * 64,
-                    }}
-                  >
-                    <i />
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {days.map((day, i) => (
+            <TimeColumn
+              key={weekWindow ? day.number : i}
+              day={day}
+              selected={selected === day.number}
+              nowMinute={
+                today === day.number
+                  ? now.getHours() * 60 + now.getMinutes()
+                  : null
+              }
+              readOnly={readOnly}
+              color={color}
+              actions={actions}
+            />
+          ))}
         </div>
       </div>
     </div>
   );
 }
+const YearMonth = memo(
+  function YearMonth({
+    year,
+    month,
+    buckets,
+    today,
+    color,
+    actions,
+  }: {
+    year: number;
+    month: number;
+    buckets: CalendarDayBucket[];
+    today: number;
+    color: Color;
+    actions: Actions;
+  }) {
+    const date = new Date(year, month, 1);
+    return (
+      <section className="mini-month">
+        <button
+          className="month-title"
+          onClick={() => actions.onDate(date, "month")}
+        >
+          {format(date, "MMMM")}
+        </button>
+        <div className="mini-grid">
+          {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+            <span key={"h" + i} className="mini-weekday">
+              {d}
+            </span>
+          ))}
+          {buckets.map((d, i) => (
+            <button
+              key={i}
+              disabled={d.date.getMonth() !== month}
+              className={`${d.number === today ? "today " : ""}${d.all.length ? "has-events" : ""}`}
+              onClick={() => actions.onDate(d.date, "day")}
+              aria-label={`${format(d.date, "EEEE, MMMM d")}, ${d.all.length} events`}
+            >
+              {d.date.getDate()}
+              {d.all.length > 0 && (
+                <i style={{ background: color(d.all[0]) }} />
+              )}
+            </button>
+          ))}
+        </div>
+      </section>
+    );
+  },
+  (a, b) =>
+    a.year === b.year &&
+    a.month === b.month &&
+    a.today === b.today &&
+    a.color === b.color &&
+    a.actions === b.actions &&
+    a.buckets.length === b.buckets.length &&
+    a.buckets.every((day, i) => day === b.buckets[i]),
+);
+const MonthWeek = memo(function MonthWeek({
+  week,
+  month,
+  today,
+  capacity,
+  readOnly,
+  showMonth,
+  color,
+  actions,
+}: {
+  week: CalendarWeekBucket;
+  month: number;
+  today: number;
+  capacity: number;
+  readOnly: boolean;
+  showMonth: boolean;
+  color: Color;
+  actions: Actions;
+}) {
+  const lanes = week.ribbons.reduce((n, s) => Math.max(n, s.lane + 1), 0),
+    visibleLanes = Math.min(lanes, capacity),
+    remaining = Math.max(0, capacity - visibleLanes);
+  return (
+    <div
+      className="month-week"
+      style={{ "--ribbon-lanes": visibleLanes } as React.CSSProperties}
+    >
+      {week.days.map((day, i) => {
+        const es = day.single;
+        const hidden =
+          week.ribbons.filter(
+            (s) => s.lane >= visibleLanes && i >= s.start && i < s.end,
+          ).length + Math.max(0, es.length - remaining);
+        return (
+          <div
+            key={i}
+            className={`month-cell ${day.date.getFullYear() * 12 + day.date.getMonth() !== month ? "outside" : ""}`}
+            onClick={(ev) => {
+              if (!(ev.target as HTMLElement).closest("button"))
+                actions.onDate(day.date, "day");
+            }}
+          >
+            <button
+              className={`date-number ${day.number === today ? "today" : ""}`}
+              onClick={(e) => actions.onExpandDay(day.date, e.currentTarget)}
+              aria-label={`Events and countdown for ${format(day.date, "MMMM d")}`}
+            >
+              {showMonth && day.date.getDate() === 1
+                ? format(day.date, "MMM d")
+                : day.date.getDate()}
+            </button>
+            <button
+              disabled={readOnly}
+              className="cell-create"
+              aria-label={`Create event on ${format(day.date, "MMMM d")}`}
+              onClick={() => actions.onCreate(day.date)}
+            >
+              +
+            </button>
+            <div
+              className="month-events"
+              style={{
+                paddingTop: `calc(${visibleLanes} * var(--ribbon-step))`,
+              }}
+            >
+              {es.slice(0, remaining).map((e) => (
+                <EventChip
+                  key={`${e.calendarId}:${e.id}`}
+                  event={e}
+                  color={color}
+                  actions={actions}
+                />
+              ))}
+              {hidden > 0 && (
+                <button
+                  className="more-events"
+                  aria-label={`Show all events on ${format(day.date, "MMMM d")}`}
+                  onClick={(ev) =>
+                    actions.onExpandDay(
+                      day.date,
+                      ev.currentTarget.closest(".month-cell") as HTMLElement,
+                    )
+                  }
+                >
+                  +{hidden} more
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      <div
+        className="ribbon-layer"
+        style={{
+          gridTemplateRows: `repeat(${visibleLanes},var(--ribbon-height))`,
+        }}
+      >
+        {week.ribbons
+          .filter((s) => s.lane < visibleLanes)
+          .map((s) => (
+            <Ribbon
+              key={`${s.event.calendarId}:${s.event.id}`}
+              segment={s}
+              color={color}
+              actions={actions}
+              month
+            />
+          ))}
+      </div>
+    </div>
+  );
+});
+function EventChip({
+  event: e,
+  color,
+  actions,
+}: {
+  event: CalendarEvent;
+  color: Color;
+  actions: Actions;
+}) {
+  return (
+    <button
+      className={`event-chip compact ${e.allDay ? "all-day" : ""}`}
+      style={{ "--event-color": color(e) } as React.CSSProperties}
+      onClick={(ev) => {
+        ev.stopPropagation();
+        actions.onEvent(e, ev.currentTarget);
+      }}
+      onDoubleClick={(ev) => actions.edit(e, ev)}
+      title={`${e.title}${e.location ? " · " + e.location : ""}`}
+    >
+      <span className="event-dot" />
+      {!e.allDay && <time>{format(eventDate(e.start), "HH:mm")}</time>}
+      <span>{e.title}</span>
+    </button>
+  );
+}
+function Ribbon({
+  segment: s,
+  color,
+  actions,
+  month = false,
+}: {
+  segment: CalendarWeekBucket["ribbons"][number];
+  color: Color;
+  actions: Actions;
+  month?: boolean;
+}) {
+  return (
+    <button
+      className={`calendar-ribbon ${s.continuesBefore ? "continues-before" : ""} ${s.continuesAfter ? "continues-after" : ""}`}
+      style={
+        {
+          gridColumn: `${s.start + 1}/${s.end + 1}`,
+          gridRow: s.lane + 1,
+          "--event-color": color(s.event),
+        } as React.CSSProperties
+      }
+      onClick={(ev) => actions.onEvent(s.event, ev.currentTarget)}
+      onDoubleClick={(ev) => actions.edit(s.event, ev)}
+      aria-label={
+        month
+          ? `${s.event.title}, ${format(eventDate(s.event.start), "MMM d")} to ${format(new Date(+eventDate(s.event.end) - 1), "MMM d")}`
+          : undefined
+      }
+    >
+      <span>
+        {month && !s.event.allDay
+          ? `${format(eventDate(s.event.start), "HH:mm")} `
+          : ""}
+        {s.event.title}
+      </span>
+    </button>
+  );
+}
+const DayHeading = memo(function DayHeading({
+  day,
+  today,
+  actions,
+}: {
+  day: CalendarDayBucket;
+  today: number;
+  actions: Actions;
+}) {
+  return (
+    <button
+      className={`day-label ${day.number === today ? "current" : ""}`}
+      onClick={(e) => actions.onExpandDay(day.date, e.currentTarget)}
+    >
+      <span>{format(day.date, "EEE")}</span>
+      <strong>{day.date.getDate()}</strong>
+    </button>
+  );
+});
+const TimeColumn = memo(function TimeColumn({
+  day,
+  selected,
+  nowMinute,
+  readOnly,
+  color,
+  actions,
+}: {
+  day: CalendarDayBucket;
+  selected: boolean;
+  nowMinute: number | null;
+  readOnly: boolean;
+  color: Color;
+  actions: Actions;
+}) {
+  const dateKey = format(day.date, "yyyy-MM-dd"),
+    dateLabel = format(day.date, "EEEE MMMM d");
+  return (
+    <div className={`day-column ${nowMinute !== null ? "is-today" : ""}`}>
+      {Array.from({ length: 24 }, (_, h) => (
+        <button
+          key={h}
+          disabled={readOnly}
+          className="hour-slot"
+          tabIndex={h === 9 && selected ? 0 : -1}
+          data-day={dateKey}
+          data-hour={h}
+          style={{ top: h * 64 }}
+          aria-label={`Create event ${dateLabel} at ${h}:00`}
+          onClick={() => {
+            const n = new Date(day.date);
+            n.setHours(h, 0, 0, 0);
+            actions.onCreate(n);
+          }}
+          onKeyDown={(ev) => {
+            if (
+              ![
+                "ArrowUp",
+                "ArrowDown",
+                "ArrowLeft",
+                "ArrowRight",
+                "Home",
+                "End",
+              ].includes(ev.key)
+            )
+              return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            let targetDay = day.date,
+              hour = h;
+            if (ev.key === "ArrowUp") hour = Math.max(0, h - 1);
+            if (ev.key === "ArrowDown") hour = Math.min(23, h + 1);
+            if (ev.key === "ArrowLeft") targetDay = addDays(day.date, -1);
+            if (ev.key === "ArrowRight") targetDay = addDays(day.date, 1);
+            if (ev.key === "Home") hour = 0;
+            if (ev.key === "End") hour = 23;
+            ev.currentTarget
+              .closest(".time-body")
+              ?.querySelector<HTMLButtonElement>(
+                `[data-day="${format(targetDay, "yyyy-MM-dd")}"][data-hour="${hour}"]`,
+              )
+              ?.focus();
+          }}
+        />
+      ))}
+      {day.positioned.map((e) => (
+        <button
+          key={`${e.calendarId}:${e.id}`}
+          className="time-event"
+          style={
+            {
+              top: (e.top / 60) * 64,
+              height: Math.max(25, ((e.bottom - e.top) / 60) * 64 - 3),
+              left: `calc(${(e.column / e.columns) * 100}% + 3px)`,
+              width: `calc(${100 / e.columns}% - 6px)`,
+              "--event-color": color(e),
+            } as React.CSSProperties
+          }
+          onClick={(ev) => actions.onEvent(e, ev.currentTarget)}
+          onDoubleClick={(ev) => actions.edit(e, ev)}
+        >
+          <strong>{e.title}</strong>
+          <span>
+            {format(eventDate(e.start), "HH:mm")} –{" "}
+            {format(eventDate(e.end), "HH:mm")}
+          </span>
+          {e.location && <span className="event-location">{e.location}</span>}
+        </button>
+      ))}
+      {nowMinute !== null && (
+        <div className="now-line" style={{ top: (nowMinute / 60) * 64 }}>
+          <i />
+        </div>
+      )}
+    </div>
+  );
+});

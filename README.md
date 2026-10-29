@@ -43,6 +43,10 @@ New events use a compact capture dialog (a bottom sheet on phones). Type `@` to 
 
 In the web view editor, enable **Continuous scrolling** for a month or week view. Months scroll vertically and settle onto week rows; weeks scroll horizontally through individual days. Nearby events load in the background, with cached ranges shown first. Scrolling keeps working while requests are pending. The setting also applies to that view on Android and when shared.
 
+## Performance
+
+The indexed renderer reuses unchanged rows and columns, and skips repeated event/date parsing. Production benchmarks show 52.4% less render cost across standard day/week/month workloads on desktop and 55.0% in a phone viewport. Continuous month/week gains are larger. These are render benchmarks; physical Android timings remain unverified. [Measurements, limitations and reproduction steps](docs/performance.md).
+
 ## Android download
 
 The release APK is a **debug build**, signed consistently across maintainer builds. It can update earlier debug installs signed with that identity. Installation and native behavior have not been tested on every Android device.

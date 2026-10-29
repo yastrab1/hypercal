@@ -1,5 +1,9 @@
 import { useEventStream } from "./useEventStream";
-import { mergeEventChunk, prefetchWindow } from "./event-stream.mjs";
+import {
+  mergeEventChunk,
+  prefetchWindow,
+  reuseRecords,
+} from "./event-stream.mjs";
 import { CalendarViewport } from "./CalendarViewport";
 import { RecurrenceDialog, type RecurrenceScope } from "./RecurrenceDialog";
 import { TagsSection, TagCountdowns } from "./TagsSection";
@@ -791,7 +795,7 @@ export default function App() {
       .then(([c, v, shared]) => {
         setSharedViews(shared);
         if (cancelled) return;
-        setCalendars(c);
+        setCalendars((old) => reuseRecords(old, c));
         setVisible((ids) => {
           const remaining = ids.filter((id) => c.some((x) => x.id === id));
           const added = c
@@ -799,7 +803,7 @@ export default function App() {
             .map((x) => x.id);
           return [...new Set([...remaining, ...added])];
         });
-        setViews(v);
+        setViews((old) => reuseRecords(old, v));
         setActiveView((current) =>
           !hasChosenView.current
             ? getDefaultView(v, layout)?.id || null

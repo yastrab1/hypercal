@@ -113,3 +113,40 @@ test("chunks remain fourteen local calendar days across DST and cover the full p
   for (const chunk of chunks)
     assert.equal(differenceInCalendarDays(chunk.to, chunk.from), 14);
 });
+
+test("unchanged provider refreshes preserve objects and arrays; edits and metadata changes replace them", async () => {
+  const { mergeEventChunk, reuseRecords } = await import(
+    "../src/event-stream.mjs"
+  );
+  const old = [
+    {
+      id: "a",
+      calendarId: "c",
+      title: "A",
+      start: "2026-10-01",
+      end: "2026-10-02",
+      tags: ["school"],
+      originalStartTime: { date: "2026-10-01" },
+    },
+  ];
+  const range = [new Date("2026-10-01"), new Date("2026-10-15")];
+  assert.equal(
+    mergeEventChunk(old, structuredClone(old), ...range, ["c"]),
+    old,
+  );
+  const updated = mergeEventChunk(
+    old,
+    [{ ...old[0], tags: ["exam"] }],
+    ...range,
+    ["c"],
+  );
+  assert.notEqual(updated[0], old[0]);
+  assert.deepEqual(updated[0].tags, ["exam"]);
+  assert.deepEqual(mergeEventChunk(updated, [], ...range, ["c"]), []);
+  const calendars = [{ id: "c", color: "red" }];
+  assert.equal(reuseRecords(calendars, [{ id: "c", color: "red" }]), calendars);
+  assert.notEqual(
+    reuseRecords(calendars, [{ id: "c", color: "blue" }]),
+    calendars,
+  );
+});

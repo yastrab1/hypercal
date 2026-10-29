@@ -4812,3 +4812,35 @@ button.tag-track {
   overflow-anchor: none;
   scroll-behavior: auto;
 }
+
+/* Fixed calendar geometry lets Chromium skip layout/paint outside the viewport. */
+@supports (content-visibility: auto) {
+  .continuous-month .month-week,
+  .continuous-week .day-column {
+    content-visibility: auto;
+  }
+}
+/* Draw the hour grid once per day instead of creating a pseudo-element for every slot. */
+.day-column,
+.day-column.is-today {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--line) 0 1px,
+    transparent 1px 32px,
+    color-mix(in srgb, var(--line) 45%, transparent) 32px 33px,
+    transparent 33px 64px
+  );
+}
+.hour-slot {
+  border-top: 0;
+}
+.hour-slot::after {
+  display: none;
+}
+.hour-slot:hover {
+  background-image: inherit;
+}
+.time-body,
+.month-week {
+  contain: layout paint;
+}

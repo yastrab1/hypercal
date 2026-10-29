@@ -32,6 +32,54 @@ export function prefetchWindow(first, layout) {
 }
 const timestamp = (value) =>
   new Date(value.length === 10 ? value + "T00:00:00" : value).getTime();
+const intervals = new WeakMap();
+const interval = (event) => {
+  let range = intervals.get(event);
+  if (!range) {
+    range = { start: timestamp(event.start), end: timestamp(event.end) };
+    intervals.set(event, range);
+  }
+  return range;
+};
+function sameFields(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => {
+      if (a[key] === b[key]) return true;
+      if (Array.isArray(a[key]) && Array.isArray(b[key]))
+        return (
+          a[key].length === b[key].length &&
+          a[key].every((v, i) => v === b[key][i])
+        );
+      if (
+        a[key] &&
+        b[key] &&
+        typeof a[key] === "object" &&
+        typeof b[key] === "object"
+      ) {
+        const nested = Object.keys(a[key]);
+        return (
+          nested.length === Object.keys(b[key]).length &&
+          nested.every((k) => a[key][k] === b[key][k])
+        );
+      }
+      return false;
+    })
+  );
+}
+export function reuseRecords(previous, incoming, key = (item) => item.id) {
+  const old = new Map(previous.map((item) => [key(item), item]));
+  const values = incoming.map((item) =>
+    sameFields(old.get(key(item)), item) ? old.get(key(item)) : item,
+  );
+  return values.length === previous.length &&
+    values.every((item, i) => item === previous[i])
+    ? previous
+    : values;
+}
 export function mergeEventChunk(existing, incoming, from, to, calendarIds) {
   const start = +from,
     end = +to,
@@ -39,14 +87,19 @@ export function mergeEventChunk(existing, incoming, from, to, calendarIds) {
   const kept = existing.filter(
     (e) =>
       !ids.has(e.calendarId) ||
-      timestamp(e.start) >= end ||
-      timestamp(e.end) <= start,
+      interval(e).start >= end ||
+      interval(e).end <= start,
   );
-  return [
-    ...new Map(
-      [...kept, ...incoming].map((e) => [`${e.calendarId}:${e.id}`, e]),
-    ).values(),
+  const key = (e) => `${e.calendarId}:${e.id}`;
+  const reused = reuseRecords(existing, incoming, key);
+  const result = [
+    ...new Map([...kept, ...reused].map((e) => [key(e), e])).values(),
   ];
+  const old = new Map(existing.map((e) => [key(e), e]));
+  return result.length === existing.length &&
+    result.every((e) => old.get(key(e)) === e)
+    ? existing
+    : result;
 }
 // Requests never gate the scroll position. Only two provider requests run at once.
 export function createEventStream({

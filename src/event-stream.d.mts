@@ -11,6 +11,11 @@ export interface PrefetchWindow {
 }
 export function eventChunks(from: Date, to: Date): EventChunk[];
 export function prefetchWindow(first: Date, layout: Layout): PrefetchWindow;
+export function reuseRecords<T extends { id: string }>(
+  previous: T[],
+  incoming: T[],
+  key?: (item: T) => string,
+): T[];
 export function mergeEventChunk(
   existing: CalendarEvent[],
   incoming: CalendarEvent[],
