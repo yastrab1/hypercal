@@ -10,7 +10,6 @@ export interface Calendar {
 export interface Tag {
   name: string;
   color: string;
-
 }
 export interface CalendarEvent {
   tags?: string[];
@@ -30,6 +29,9 @@ export interface CalendarEvent {
   useDefaultReminders?: boolean;
   etag?: string;
   recurring?: boolean;
+  recurringEventId?: string;
+  originalStartTime?: { date?: string; dateTime?: string; timeZone?: string };
+  scope?: "instance" | "all" | "following";
   htmlLink?: string;
 }
 export interface SavedView {

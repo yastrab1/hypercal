@@ -1,3 +1,4 @@
+import { applyTagAliases } from "./tag-aliases.mjs";
 import { readEventTags } from "./tags.mjs";
 import { readEventColor } from "../src/event-colors.mjs";
 import { OAuth2Client } from "google-auth-library";
@@ -65,16 +66,26 @@ export async function allPages(id, path) {
       path +
         (pageToken ? `${sep}pageToken=${encodeURIComponent(pageToken)}` : ""),
     );
-    items.push(...(data.items || []));
+    items.push(
+      ...(data.items || []).map((item) =>
+        path.startsWith("users/me/calendarList")
+          ? { ...item, _hypercalAccountId: id }
+          : item,
+      ),
+    );
     pageToken = data.nextPageToken;
   } while (pageToken);
   return items;
 }
-export function normalizeEvent(e, calendar) {
+export function normalizeEvent(
+  e,
+  calendar,
+  accountId = calendar._hypercalAccountId,
+) {
   return {
     id: e.id,
     calendarId: calendar.id,
-    tags: readEventTags(e),
+    tags: applyTagAliases(readEventTags(e), getAccount(accountId)?.tagAliases),
     title: e.summary || "Untitled event",
     description: e.description || "",
     location: e.location || "",
@@ -90,7 +101,9 @@ export function normalizeEvent(e, calendar) {
       : (e.reminders?.overrides?.find((x) => x.method === "popup")?.minutes ??
         (e.reminders?.overrides?.length === 0 ? null : undefined)),
     etag: e.etag,
-    recurring: !!e.recurringEventId,
+    recurring: !!(e.recurringEventId || e.recurrence?.length),
+    recurringEventId: e.recurringEventId,
+    originalStartTime: e.originalStartTime,
     htmlLink: e.htmlLink,
   };
 }

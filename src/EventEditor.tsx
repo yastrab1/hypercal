@@ -175,7 +175,7 @@ export function EventEditor({
       )}
       {event?.recurring && (
         <div className="inline-note event-status">
-          Changes apply to this occurrence only.
+          Choose which occurrences to update when you save.
         </div>
       )}
       <fieldset disabled={disabled}>

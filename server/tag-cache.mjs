@@ -93,6 +93,11 @@ export class TagCache {
     this.write(account, data);
     return merged;
   }
+  forget(account, calendarId, eventId) {
+    const data = this.read(account);
+    delete data.events[key({ calendarId, id: eventId })];
+    this.write(account, data);
+  }
   remove(account, calendarId, eventId) {
     const data = this.read(account),
       id = key({ calendarId, id: eventId }),

@@ -1,8 +1,11 @@
+import { eventBody, scopedEventBody } from "./event-body.mjs";
+import { applyTagAliases } from "./tag-aliases.mjs";
+import { changeRecurring } from "./recurrence.mjs";
+import { registerTagCrud } from "./tag-crud.mjs";
 import { TagCache } from "./tag-cache.mjs";
-import { googleTagFields, tagKey, readEventTags } from "./tags.mjs";
+import { tagKey } from "./tags.mjs";
 import { registerSharedViews } from "./shared-views.mjs";
 import { validNotification } from "../src/notifications.mjs";
-import { googleColorFields } from "../src/event-colors.mjs";
 import "dotenv/config";
 import express from "express";
 import session from "express-session";
@@ -356,8 +359,26 @@ function validTagView(account, key) {
 }
 app.put("/api/tags", auth, (req, res) => {
   const tags = tagsSchema.parse(req.body);
-  upsertAccount(req.session.accountId, { tags });
+  const account = getAccount(req.session.accountId);
+  const added = tags.filter(
+    (t) => !(account.tags || []).some((old) => old.name === t.name),
+  );
+  if (
+    added.some((t) =>
+      (account.tagJobs || []).some((job) => job.from === t.name),
+    )
+  )
+    return res.status(409).json({
+      error: "This name is still syncing. Try again after tag sync finishes.",
+    });
+  const aliases = { ...account.tagAliases };
+  for (const tag of added) delete aliases[tag.name];
+  upsertAccount(req.session.accountId, { tags, tagAliases: aliases });
   res.json(tags);
+});
+const tagCrud = registerTagCrud(app, auth, tagCache, (id) => {
+  for (const [key, state] of tagRefreshes)
+    if (key.startsWith(JSON.stringify([id]).slice(0, -1))) state.checkedAt = 0;
 });
 app.get("/api/tag-countdowns", auth, async (req, res) => {
   const id = req.session.accountId,
@@ -436,12 +457,15 @@ app.get("/api/tag-countdowns", auth, async (req, res) => {
             if (!text) return;
             tagCache.remember(
               id,
-              parseFeed(
-                text,
-                sub,
-                from.toISOString(),
-                feedTo.toISOString(),
-              ).filter((e) => e.tags?.includes(trackedName)),
+              parseFeed(text, sub, from.toISOString(), feedTo.toISOString())
+                .map((e) => ({
+                  ...e,
+                  tags: applyTagAliases(
+                    e.tags || [],
+                    getAccount(id).tagAliases,
+                  ),
+                }))
+                .filter((e) => e.tags?.includes(trackedName)),
             );
           });
         let cursor = 0;
@@ -612,7 +636,10 @@ app.get("/api/events", auth, async (req, res) => {
               calendarId,
               from,
               to,
-              parseFeed(text, sub, from, to),
+              parseFeed(text, sub, from, to).map((e) => ({
+                ...e,
+                tags: applyTagAliases(e.tags || [], getAccount(id).tagAliases),
+              })),
             )
           : [];
       }
@@ -664,6 +691,7 @@ const eventSchema = z
     start: z.string(),
     end: z.string(),
     allDay: z.boolean(),
+    scope: z.enum(["instance", "all", "following"]).optional(),
     etag: z.string().optional(),
     color: z
       .string()
@@ -698,49 +726,6 @@ const eventSchema = z
   .refine((e) => new Date(e.end) > new Date(e.start), {
     message: "End must be after start.",
   });
-function eventBody(e) {
-  const time = e.allDay
-    ? { start: { date: e.start }, end: { date: e.end } }
-    : {
-        start: {
-          dateTime: e.start,
-          timeZone:
-            e.timeZone || process.env.CALENDAR_TIMEZONE || "Europe/Prague",
-        },
-        end: {
-          dateTime: e.end,
-          timeZone:
-            e.timeZone || process.env.CALENDAR_TIMEZONE || "Europe/Prague",
-        },
-      };
-  return {
-    ...googleColorFields(e.color),
-    extendedProperties: {
-      ...googleColorFields(e.color).extendedProperties,
-      ...googleTagFields(e.tags, e.previousTags),
-    },
-    summary: e.title,
-    description: e.description,
-    location: e.location,
-    ...time,
-    ...(e.useDefaultReminders
-      ? { reminders: { useDefault: true } }
-      : e.reminderMinutes !== undefined
-        ? {
-            reminders: {
-              useDefault: false,
-              overrides:
-                e.reminderMinutes === null
-                  ? []
-                  : [{ method: "popup", minutes: e.reminderMinutes }],
-            },
-          }
-        : {}),
-    ...(e.recurrence && e.recurrence !== "none"
-      ? { recurrence: [`RRULE:FREQ=${e.recurrence.toUpperCase()}`] }
-      : {}),
-  };
-}
 app.post("/api/events", auth, async (req, res) => {
   const e = eventSchema.parse(req.body);
   const result = await googleRequest(
@@ -753,7 +738,13 @@ app.post("/api/events", auth, async (req, res) => {
       state.checkedAt = 0;
   tagCache.remember(
     req.session.accountId,
-    [normalizeEvent(result, { id: e.calendarId, accessRole: "writer" })],
+    [
+      normalizeEvent(result, {
+        id: e.calendarId,
+        accessRole: "writer",
+        _hypercalAccountId: req.session.accountId,
+      }),
+    ],
     { local: true },
   );
   res.status(201).json(result);
@@ -801,49 +792,50 @@ app.post("/api/events/:id/copy", auth, async (req, res) => {
   res.status(201).json(normalizeEvent(copied, destination));
 });
 app.patch("/api/events/:id", auth, async (req, res) => {
-  const e = eventSchema.parse(req.body);
-  if (!e.etag)
+  const draft = eventSchema.parse(req.body);
+  if (!draft.etag)
     return res.status(400).json({ error: "Refresh the event before editing." });
-  const source =
-    e.tags === undefined
-      ? null
-      : await googleRequest(
-          req.session.accountId,
-          `calendars/${encodeURIComponent(e.calendarId)}/events/${encodeURIComponent(req.params.id)}`,
-        );
-  const result = await googleRequest(
-    req.session.accountId,
-    `calendars/${encodeURIComponent(e.calendarId)}/events/${encodeURIComponent(req.params.id)}`,
-    {
-      method: "PATCH",
-      body: eventBody({
-        ...e,
-        previousTags: source ? readEventTags(source) : [],
-      }),
-      etag: e.etag,
-    },
-  );
+  const result = await changeRecurring({
+    id: req.session.accountId,
+    calendarId: draft.calendarId,
+    eventId: req.params.id,
+    etag: draft.etag,
+    scope: draft.scope,
+    draft,
+    body: scopedEventBody,
+    normalize: normalizeEvent,
+    request: googleRequest,
+    cache: tagCache,
+  });
   for (const [key, state] of tagRefreshes)
     if (key.startsWith(JSON.stringify([req.session.accountId]).slice(0, -1)))
       state.checkedAt = 0;
-  tagCache.remember(
-    req.session.accountId,
-    [normalizeEvent(result, { id: e.calendarId, accessRole: "writer" })],
-    { local: true },
-  );
   res.json(result);
 });
 app.delete("/api/events/:id", auth, async (req, res) => {
-  const { calendarId, etag } = z
-    .object({ calendarId: z.string(), etag: z.string() })
+  const input = z
+    .object({
+      calendarId: z.string(),
+      etag: z.string(),
+      scope: z.enum(["instance", "all", "following"]).optional(),
+    })
     .parse(req.body);
-  await googleRequest(
-    req.session.accountId,
-    `calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(req.params.id)}`,
-    { method: "DELETE", etag },
-  );
-  tagCache.remove(req.session.accountId, calendarId, req.params.id);
-  res.json({ ok: true });
+  const result = await changeRecurring({
+    id: req.session.accountId,
+    calendarId: input.calendarId,
+    eventId: req.params.id,
+    etag: input.etag,
+    scope: input.scope,
+    remove: true,
+    body: scopedEventBody,
+    normalize: normalizeEvent,
+    request: googleRequest,
+    cache: tagCache,
+  });
+  for (const [key, state] of tagRefreshes)
+    if (key.startsWith(JSON.stringify([req.session.accountId]).slice(0, -1)))
+      state.checkedAt = 0;
+  res.json(result);
 });
 const viewSchema = z.object({
   name: z.string().trim().min(1).max(60),
@@ -1015,4 +1007,7 @@ const server = app.listen(
 process.on("SIGTERM", () => server.close(() => process.exit(0)));
 export { app, server };
 
-server.on("close", () => sharedStore.close());
+server.on("close", () => {
+  sharedStore.close();
+  tagCrud.close();
+});

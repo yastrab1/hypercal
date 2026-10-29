@@ -81,3 +81,6 @@ export function setLayoutDefault(id, layout, viewId) {
   save();
   return account.views;
 }
+export function listAccountIds() {
+  return Object.keys(db.accounts);
+}

@@ -1,3 +1,4 @@
+import { RecurrenceDialog, type RecurrenceScope } from "./RecurrenceDialog";
 import { TagsSection, TagCountdowns } from "./TagsSection";
 import { cleanTags } from "./tags.mjs";
 import {
@@ -316,6 +317,17 @@ export default function App() {
     | "goto"
     | null
   >(null);
+  const [recurrenceRequest, setRecurrenceRequest] = useState<{
+    action: "edit" | "delete";
+    resolve: (scope: RecurrenceScope | null) => void;
+  } | null>(null);
+  const requestScope = (
+    event: CalendarEvent | null,
+    action: "edit" | "delete",
+  ): Promise<RecurrenceScope | null> =>
+    event?.recurring
+      ? new Promise((resolve) => setRecurrenceRequest({ action, resolve }))
+      : Promise.resolve("instance");
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [newDate, setNewDate] = useState(new Date());
   const [editingView, setEditingView] = useState<SavedView | null>(null);
@@ -426,6 +438,68 @@ export default function App() {
     setTags(result);
   }
 
+  async function changeTag(oldName: string, replacement: Tag | null) {
+    if (live && !canWrite)
+      throw new Error("Connect and sync before changing tags.");
+    if (
+      replacement &&
+      replacement.name !== oldName &&
+      tags.some((t) => t.name === replacement.name)
+    )
+      throw new Error("That tag already exists.");
+    const result = live
+      ? await api<{
+          tags: Tag[];
+          tracking: Record<string, string | null>;
+          pending: boolean;
+        }>(`/tags/${encodeURIComponent(oldName)}`, {
+          method: replacement ? "PATCH" : "DELETE",
+          body: replacement ? JSON.stringify(replacement) : undefined,
+        })
+      : {
+          tags: replacement
+            ? tags.map((t) => (t.name === oldName ? replacement : t))
+            : tags.filter((t) => t.name !== oldName),
+          tracking: Object.fromEntries(
+            Object.entries(tagTracking).map(([key, value]) => [
+              key,
+              value === oldName ? replacement?.name || null : value,
+            ]),
+          ),
+          pending: false,
+        };
+    setTags(result.tags);
+    setTagTracking(result.tracking);
+    localStorage.setItem(
+      `hypercal.tags.${tagAccount}`,
+      JSON.stringify(result.tags),
+    );
+    localStorage.setItem(
+      `hypercal.tagTracking.${tagAccount}`,
+      JSON.stringify(result.tracking),
+    );
+    setEvents((es) =>
+      es.map((e) => ({
+        ...e,
+        tags: [
+          ...new Set(
+            (e.tags || [])
+              .map((name) =>
+                name === oldName ? replacement?.name || null : name,
+              )
+              .filter((x): x is string => !!x),
+          ),
+        ],
+      })),
+    );
+    if (live) calendarCache.invalidateEvents(accountId!);
+    setRefresh((n) => n + 1);
+    flash(
+      result.pending
+        ? "Tag saved. Google event metadata is syncing in the background."
+        : "Tag saved.",
+    );
+  }
   async function trackTag(tagName: string | null) {
     if (live && !canWrite)
       throw new Error("Connect and sync before changing tracked tags.");
@@ -526,6 +600,10 @@ export default function App() {
   const close = useCallback(() => setPanel(null), []);
   const backAction = useRef<() => void>(() => {});
   backAction.current = () => {
+    if (recurrenceRequest) {
+      recurrenceRequest.resolve(null);
+      setRecurrenceRequest(null);
+    }
     if (panel || preview || expandedDay || sharedRoute || layout !== "month") {
       setPanel(null);
       setPreview(null);
@@ -900,6 +978,8 @@ export default function App() {
     return () => window.removeEventListener("keydown", listener);
   });
   async function saveEvent(draft: CalendarEvent, recurrence: string) {
+    const scope = await requestScope(editingEvent, "edit");
+    if (!scope) return;
     const missing = cleanTags(draft.tags).filter(
       (name) => !tags.some((t) => t.name === name),
     );
@@ -922,6 +1002,7 @@ export default function App() {
       throw new Error("Connect and finish syncing before saving changes.");
     const payload = {
       ...draft,
+      scope,
       recurrence: editingEvent ? undefined : recurrence,
     };
     await api(
@@ -937,12 +1018,14 @@ export default function App() {
     flash("Saved to Google Calendar.");
   }
   async function deleteEvent(e: CalendarEvent) {
+    const scope = await requestScope(e, "delete");
+    if (!scope) return;
     if (live && !canWrite)
       throw new Error("Connect and finish syncing before deleting events.");
     if (live)
       await api(`/events/${encodeURIComponent(e.id)}`, {
         method: "DELETE",
-        body: JSON.stringify({ calendarId: e.calendarId, etag: e.etag }),
+        body: JSON.stringify({ calendarId: e.calendarId, etag: e.etag, scope }),
       });
     else setEvents((es) => es.filter((x) => x.id !== e.id));
     if (live) {
@@ -1448,6 +1531,8 @@ export default function App() {
           onChange={saveTags}
           trackedTag={trackedTag}
           onTrack={trackTag}
+          onEdit={(name, tag) => changeTag(name, tag)}
+          onDelete={(name) => changeTag(name, null)}
         />
         <div className="sidebar-bottom">
           <button
@@ -1770,6 +1855,15 @@ export default function App() {
           <CheckCircle2 size={17} />
           {notice}
         </div>
+      )}
+      {recurrenceRequest && (
+        <RecurrenceDialog
+          action={recurrenceRequest.action}
+          onChoose={(scope) => {
+            recurrenceRequest.resolve(scope);
+            setRecurrenceRequest(null);
+          }}
+        />
       )}
       {panel === "event" && (
         <Panel

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Plus, Check, Eye } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { Plus, Check, Eye, Pencil, Trash2, X } from "lucide-react";
 import { countdown, pillInk, highlightColor } from "./tags.mjs";
 import type { Tag, CalendarEvent } from "./types";
 import { api } from "./api";
@@ -10,6 +10,8 @@ export function TagsSection({
   onChange,
   trackedTag,
   onTrack,
+  onEdit,
+  onDelete,
 }: {
   tags: Tag[];
   live: boolean;
@@ -17,10 +19,63 @@ export function TagsSection({
   onChange: (tags: Tag[]) => Promise<void>;
   trackedTag: string | null;
   onTrack: (name: string | null) => Promise<void>;
+  onEdit: (oldName: string, tag: Tag) => Promise<void>;
+  onDelete: (name: string) => Promise<void>;
 }) {
+  const [syncNote, setSyncNote] = useState("");
+  useEffect(() => {
+    if (!live) {
+      setSyncNote("");
+      return;
+    }
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = () =>
+      api<{ pending: number; error: string | null }>("/tag-sync")
+        .then((result) => {
+          if (cancelled) return;
+          setSyncNote(
+            result.error ||
+              (result.pending ? "Tag changes are syncing with Google…" : ""),
+          );
+          if (result.pending) timer = setTimeout(check, 4000);
+        })
+        .catch(() => {
+          if (!cancelled)
+            setSyncNote(
+              "Tag sync status is unavailable. Saved changes will retry.",
+            );
+        });
+    check();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [live, JSON.stringify(tags)]);
   const [adding, setAdding] = useState(false),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const section = useRef<HTMLElement>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  useEffect(() => {
+    section.current
+      ?.querySelector(".tag-edit-form,.tag-delete-confirm")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [editing, deleting]);
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      setEditing(null);
+      setDeleting(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function save(values: Tag[]) {
     setBusy(true);
     setError("");
@@ -35,7 +90,7 @@ export function TagsSection({
     }
   }
   return (
-    <section className="tags-section" aria-label="Tags">
+    <section ref={section} className="tags-section" aria-label="Tags">
       <div className="section-label">
         <span>TAGS</span>
         <button
@@ -89,6 +144,101 @@ export function TagsSection({
             <span>{tag.name}</span>
             {trackedTag === tag.name && <Eye size={17} aria-hidden="true" />}
           </button>
+          <button
+            className="icon-button tag-edit"
+            aria-label={`Edit tag ${tag.name}`}
+            disabled={busy || (live && !canWrite)}
+            onClick={() => {
+              setEditing(editing === tag.name ? null : tag.name);
+              setDeleting(null);
+              setError("");
+            }}
+          >
+            <Pencil size={14} />
+          </button>
+          <button
+            className="icon-button tag-delete"
+            aria-label={`Delete tag ${tag.name}`}
+            disabled={busy || (live && !canWrite)}
+            onClick={() => {
+              setDeleting(deleting === tag.name ? null : tag.name);
+              setEditing(null);
+              setError("");
+            }}
+          >
+            <Trash2 size={14} />
+          </button>
+          {editing === tag.name && (
+            <form
+              className="tag-edit-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const f = new FormData(e.currentTarget);
+                void run(() =>
+                  onEdit(tag.name, {
+                    name: String(f.get("name")).trim(),
+                    color: String(f.get("color")),
+                  }),
+                );
+              }}
+            >
+              <label className="field">
+                Tag name
+                <input
+                  name="name"
+                  aria-label="Edit tag name"
+                  defaultValue={tag.name}
+                  required
+                  maxLength={60}
+                  autoFocus
+                />
+              </label>
+              <label>
+                Color{" "}
+                <input
+                  type="color"
+                  name="color"
+                  aria-label="Edit tag color"
+                  defaultValue={tag.color}
+                />
+              </label>
+              <div className="tag-form-actions">
+                <button className="primary-button" disabled={busy}>
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setEditing(null)}
+                  disabled={busy}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+          {deleting === tag.name && (
+            <div className="tag-delete-confirm">
+              <p>
+                Delete “{tag.name}”? This removes its assignments and
+                tracked-view selection. Events are kept.
+              </p>
+              <button
+                className="danger-button"
+                disabled={busy}
+                onClick={() => run(() => onDelete(tag.name))}
+              >
+                {busy ? "Deleting…" : "Delete tag"}
+              </button>
+              <button
+                className="secondary-button"
+                disabled={busy}
+                onClick={() => setDeleting(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
       ))}
       {adding && (
@@ -132,6 +282,11 @@ export function TagsSection({
             <Check size={18} />
           </button>
         </form>
+      )}
+      {syncNote && (
+        <p className="sidebar-hint" role="status">
+          {syncNote}
+        </p>
       )}
       {error && (
         <p className="form-error" role="alert">
