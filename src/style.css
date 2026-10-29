@@ -4700,8 +4700,6 @@ button.tag-track {
 .continuous-month {
   overflow-y: auto;
   overflow-x: hidden;
-  scroll-snap-type: y mandatory;
-  scroll-padding-top: 36px;
   touch-action: pan-y;
 }
 .continuous-month .month-view {
@@ -4716,9 +4714,6 @@ button.tag-track {
   flex: 0 0 36px;
   z-index: 5;
   background: var(--paper);
-}
-.continuous-month .month-week {
-  scroll-snap-align: start;
 }
 .continuous-month .month-grid {
   min-height: 0;
@@ -4816,16 +4811,4 @@ button.tag-track {
 .continuous-calendar {
   overflow-anchor: none;
   scroll-behavior: auto;
-}
-.continuous-week {
-  scroll-snap-type: x mandatory;
-  scroll-padding-left: 60px;
-}
-.continuous-week .day-label {
-  scroll-snap-align: start;
-}
-@media (max-width: 760px) {
-  .continuous-week {
-    scroll-padding-left: 36px;
-  }
 }

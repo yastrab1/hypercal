@@ -47,7 +47,11 @@ function ContinuousCalendar({
     month ? monthRange(props.date).from : startOfDay(props.date),
   );
   const [windowIndex, setWindowIndex] = useState(center - before);
-  const [size, setSize] = useState({ width: 700, height: 600 });
+  const [size, setSize] = useState({
+    width: 700,
+    height: 600,
+    compact: matchMedia("(max-width: 760px)").matches,
+  });
   const root = useRef<HTMLDivElement>(null);
   const reported = useRef(props.date.getTime());
   const dimensions = useRef(0);
@@ -57,7 +61,9 @@ function ContinuousCalendar({
   const callbacks = useRef({ onViewportDate, onApproach });
   callbacks.current = { onViewportDate, onApproach };
   const lastApproach = useRef(-1);
-  const gutter = size.width <= 760 ? 36 : 60;
+  // The gutter follows the viewport media query used by CalendarCanvas,
+  // not the available calendar width after the desktop sidebar is deducted.
+  const gutter = size.compact ? 36 : 60;
   const unit = month
     ? Math.max(30, (size.height - 36) / 6)
     : Math.max(1, (size.width - gutter) / 7);
@@ -69,6 +75,7 @@ function ContinuousCalendar({
       setSize({
         width: entry.contentRect.width,
         height: entry.contentRect.height,
+        compact: matchMedia("(max-width: 760px)").matches,
       }),
     );
     observer.observe(element);
@@ -130,7 +137,31 @@ function ContinuousCalendar({
     );
   };
   const settled = () => {
-    const index = position();
+    const element = root.current;
+    if (!element) return;
+    const offset = month ? element.scrollTop : element.scrollLeft;
+    const index = Math.max(0, Math.min(total - 7, Math.round(offset / unit)));
+    const target = index * unit;
+    // CSS scroll-snap can re-anchor as the virtual window is recycled. Keep
+    // native input/inertia untouched, and settle once the gesture is idle.
+    if (Math.abs(offset - target) > 1) {
+      element.scrollTo(
+        month
+          ? {
+              top: target,
+              behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+                ? "instant"
+                : "smooth",
+            }
+          : {
+              left: target,
+              behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+                ? "instant"
+                : "smooth",
+            },
+      );
+      return;
+    }
     const date = addDays(dayAt(index), month ? 3 : 0);
     if (reported.current !== date.getTime()) {
       reported.current = date.getTime();
@@ -156,7 +187,7 @@ function ContinuousCalendar({
         }
       });
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(settled, 220);
+    timer.current = setTimeout(settled, 180);
   };
   return (
     <div
