@@ -1,6 +1,11 @@
 # A whitelist keeps OAuth secrets, live data and Android signing keys out of
 # both the build context and image, including future files added to the repo.
 **
+!worker/
+!worker/*.mjs
+!worker/package.json
+!worker/package-lock.json
+!worker/Dockerfile
 !Dockerfile
 !package.json
 !package-lock.json

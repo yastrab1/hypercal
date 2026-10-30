@@ -14,6 +14,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY server ./server
+COPY worker/edupage.mjs ./worker/edupage.mjs
 COPY --from=build /app/src/*.mjs ./src/
 COPY --from=build /app/dist ./dist
 RUN mkdir -p /data /app/dist/downloads && chown node:node /data

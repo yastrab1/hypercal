@@ -46,6 +46,15 @@ jobs:
           docker run -d --name hypercal-ci-test --read-only --tmpfs /tmp --tmpfs /data:uid=1000,gid=1000,mode=0700 -p 127.0.0.1:39732:3001 hypercal-ci
           curl --retry 15 --retry-all-errors --retry-delay 1 -fsS http://127.0.0.1:39732/api/health
           docker exec hypercal-ci-test sh -c 'test ! -f /app/.env && test ! -d /app/.data'
+      - name: Build and smoke-test isolated browser worker
+        run: |
+          docker build -f worker/Dockerfile -t hypercal-browser-ci .
+          openssl rand -hex 32 > "$RUNNER_TEMP/hypercal-worker-token"
+          chmod 644 "$RUNNER_TEMP/hypercal-worker-token"
+          trap 'docker rm -f hypercal-browser-ci-test >/dev/null 2>&1 || true' EXIT
+          docker run -d --name hypercal-browser-ci-test --init --user 1000:1000 --read-only --cap-drop ALL --cap-add SYS_CHROOT --security-opt no-new-privileges:true --security-opt seccomp=deploy/browser-seccomp.json --shm-size 256m --tmpfs /tmp:mode=1777,size=512m --tmpfs /profiles:uid=1000,gid=1000,mode=0700 -v "$RUNNER_TEMP/hypercal-worker-token:/run/secrets/browser-token:ro" -p 127.0.0.1:39733:3002 hypercal-browser-ci
+          curl --retry 15 --retry-all-errors --retry-delay 1 -fsS http://127.0.0.1:39733/health
+          docker exec hypercal-browser-ci-test node --input-type=module -e 'import {chromium} from "playwright"; const browser = await chromium.launch({chromiumSandbox:true}); await browser.close();'
       - name: Build web and sync Android
         run: npm run android:sync
       - name: Restore consistent debug signing identity

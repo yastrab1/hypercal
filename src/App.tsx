@@ -1,3 +1,4 @@
+import { PluginsPanel } from "./PluginsPanel";
 import { continuousFor } from "./scroll-options.mjs";
 import { ScrollOptions } from "./ScrollOptions";
 import { useEventStream } from "./useEventStream";
@@ -42,6 +43,7 @@ import {
 } from "date-fns";
 import {
   CalendarDays,
+  Puzzle,
   Users,
   ChevronDown,
   ChevronLeft,
@@ -176,7 +178,7 @@ export default function App() {
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
-  const canEditViews = desktop && !Capacitor.isNativePlatform();
+  const canEditViews = true;
   const [theme, setTheme] = useState<Theme>(() =>
     stored("hypercal.theme", window.innerWidth < 761 ? "system" : "dark"),
   );
@@ -337,6 +339,7 @@ export default function App() {
     | "view"
     | "subscription"
     | "settings"
+    | "plugins"
     | "shortcuts"
     | "palette"
     | "goto"
@@ -719,6 +722,55 @@ export default function App() {
     setNotice(text);
     setTimeout(() => setNotice(""), 4500);
   };
+  const [pluginBusy, setPluginBusy] = useState(false);
+  const pluginPoll = useRef<AbortController | null>(null);
+  useEffect(() => () => pluginPoll.current?.abort(), [accountId]);
+  const activatePlugins = useCallback(async () => {
+    if (pluginPoll.current && !pluginPoll.current.signal.aborted) return;
+    const controller = new AbortController();
+    pluginPoll.current = controller;
+    try {
+      const started = await api<{ running: boolean }>("/plugins/activate", {
+        method: "POST",
+        signal: controller.signal,
+      });
+      if (!started.running) return;
+      setPluginBusy(true);
+      for (
+        let attempt = 0;
+        attempt < 90 && !controller.signal.aborted;
+        attempt++
+      ) {
+        await new Promise<void>((resolve) => {
+          const finish = () => {
+            clearTimeout(timer);
+            controller.signal.removeEventListener("abort", finish);
+            resolve();
+          };
+          const timer = setTimeout(finish, 2000);
+          controller.signal.addEventListener("abort", finish, { once: true });
+        });
+        if (controller.signal.aborted) break;
+        const state = await api<{ instances: { status: string }[] }>(
+          "/plugins",
+          { signal: controller.signal },
+        );
+        if (
+          !state.instances.some((i) => ["queued", "running"].includes(i.status))
+        ) {
+          setRefresh((n) => n + 1);
+          break;
+        }
+      }
+    } catch {
+      /* Import failures are shown in Plugins; calendar browsing stays usable. */
+    } finally {
+      if (pluginPoll.current === controller) {
+        pluginPoll.current = null;
+        setPluginBusy(false);
+      }
+    }
+  }, []);
   const requestSync = useCallback(async () => {
     setOnline(navigator.onLine);
     if (!navigator.onLine) {
@@ -755,6 +807,7 @@ export default function App() {
         });
         setUsingCache(false);
       } else {
+        void activatePlugins();
         setMetadataRefresh((n) => n + 1);
         setRefresh((n) => n + 1);
       }
@@ -764,7 +817,7 @@ export default function App() {
       setSyncFailed(true);
       setBootError((e as Error).message);
     }
-  }, []);
+  }, [activatePlugins]);
   async function manualSync() {
     try {
       if (live && navigator.onLine)
@@ -1495,7 +1548,7 @@ export default function App() {
           <div className="section-label">
             <span>VIEWS</span>
             <button
-              className="icon-button web-only"
+              className="icon-button"
               aria-label="Create custom view"
               onClick={() => {
                 setEditingView(null);
@@ -1529,7 +1582,7 @@ export default function App() {
                   )}
                 </button>
                 <button
-                  className="view-edit web-only"
+                  className="view-edit"
                   aria-label={`Customize ${labels[l]} view`}
                   onClick={() => {
                     setEditingView(
@@ -1544,6 +1597,7 @@ export default function App() {
                         isDefault: true,
                       },
                     );
+                    setSidebar(false);
                     setPanel("view");
                   }}
                 >
@@ -1565,10 +1619,11 @@ export default function App() {
                   <kbd>{views.indexOf(v) < 9 ? views.indexOf(v) + 1 : ""}</kbd>
                 </button>
                 <button
-                  className="view-edit web-only"
+                  className="view-edit"
                   aria-label={`Edit ${v.name}`}
                   onClick={() => {
                     setEditingView(v);
+                    setSidebar(false);
                     setPanel("view");
                   }}
                 >
@@ -1576,6 +1631,16 @@ export default function App() {
                 </button>
               </div>
             ))}
+          <button
+            className="view-link"
+            onClick={() => {
+              setSidebar(false);
+              setPanel("plugins");
+            }}
+          >
+            <Puzzle size={17} />
+            <span>Plugins</span>
+          </button>
           {sharedViews.map((v) => (
             <button
               key={v.id}
@@ -1763,7 +1828,7 @@ export default function App() {
           )}
           <div className="mobile-header-actions">
             <SyncIndicator
-              busy={busy || (continuous && eventStream.busy)}
+              busy={busy || pluginBusy || (continuous && eventStream.busy)}
               cached={usingCache}
               online={online}
               onRefresh={manualSync}
@@ -1800,7 +1865,7 @@ export default function App() {
               <Search size={20} />
             </button>
             <SyncIndicator
-              busy={busy || (continuous && eventStream.busy)}
+              busy={busy || pluginBusy || (continuous && eventStream.busy)}
               cached={usingCache}
               online={online}
               onRefresh={manualSync}
@@ -1879,7 +1944,7 @@ export default function App() {
         <div
           ref={surfaceRef}
           className="calendar-surface"
-          aria-busy={busy || (continuous && eventStream.busy)}
+          aria-busy={busy || pluginBusy || (continuous && eventStream.busy)}
         >
           <div className="period-track">
             {periodPreview &&
@@ -2083,6 +2148,15 @@ export default function App() {
               setVisible((ids) => ids.filter((x) => x !== id));
               flash("Subscription removed.");
             }}
+          />
+        </Panel>
+      )}
+      {panel === "plugins" && (
+        <Panel title="Plugins" onClose={close}>
+          <PluginsPanel
+            calendars={calendars}
+            connected={live}
+            onChanged={() => setRefresh((n) => n + 1)}
           />
         </Panel>
       )}

@@ -5,11 +5,15 @@ services:
     image: hypercal:local
     restart: unless-stopped
     init: true
-    env_file: ${HYPERCAL_ENV_FILE:-.env}
+    env_file:
+      - ${HYPERCAL_ENV_FILE:-.env}
+      - path: .env.edupage
+        required: false
     environment:
       HOST: 0.0.0.0
       PORT: 3001
       DATA_DIR: /data
+      BROWSER_WORKER_URL: http://hypercal-browser:3002
       APP_URL: ${APP_URL:-http://localhost:3791}
       TRUST_PROXY: ${TRUST_PROXY:-1}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
@@ -24,5 +28,37 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     stop_grace_period: 30s
+
+  hypercal-browser:
+    depends_on:
+      hypercal:
+        condition: service_healthy
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    image: hypercal-browser:local
+    restart: unless-stopped
+    init: true
+    user: "1000:1000"
+    env_file:
+      - path: .env.edupage
+        required: false
+    volumes:
+      - hypercal-browser:/profiles
+      - hypercal-data:/data:ro
+    environment:
+      WORKER_TOKEN_FILE: /data/browser-worker-token
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=512m
+    shm_size: 256mb
+    cap_drop: [ALL]
+    cap_add: [SYS_CHROOT]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./deploy/browser-seccomp.json
+    mem_limit: 2g
+
 volumes:
   hypercal-data:
+  hypercal-browser:

@@ -10,7 +10,13 @@ export async function api<T>(
     ...options,
     signal:
       options.signal ||
-      AbortSignal.timeout(path.startsWith("/events?") ? 45000 : 20000),
+      AbortSignal.timeout(
+        path.includes("/browser/")
+          ? 100000
+          : path.startsWith("/events?")
+            ? 45000
+            : 20000,
+      ),
     headers: {
       "Content-Type": "application/json",
       "X-CSRF-Token": csrf,

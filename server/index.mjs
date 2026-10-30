@@ -1,3 +1,8 @@
+import {
+  createPluginService,
+  registerPluginHooks,
+  registerPlugins,
+} from "./plugins.mjs";
 import { eventBody, scopedEventBody } from "./event-body.mjs";
 import { applyTagAliases } from "./tag-aliases.mjs";
 import { changeRecurring } from "./recurrence.mjs";
@@ -73,6 +78,8 @@ app.use(
 );
 app.use("/api/imports", express.json({ limit: "5mb" }));
 app.use(express.json({ limit: "256kb" }));
+const plugins = createPluginService();
+registerPluginHooks(app, plugins);
 // Health probes do not allocate sessions or write files.
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 const secretPath = resolve(dataDir, "session-secret");
@@ -281,6 +288,7 @@ app.patch("/api/preferences", auth, (req, res) => {
   res.json({ notificationDefault });
 });
 const sharedStore = registerSharedViews(app, auth, appUrl);
+registerPlugins(app, auth, plugins, appUrl);
 app.post("/api/logout", (req, res) =>
   req.session.destroy(() => {
     res.clearCookie("hypercal.sid");
@@ -1019,3 +1027,5 @@ server.on("close", () => {
   sharedStore.close();
   tagCrud.close();
 });
+
+server.on("close", () => plugins.close());
