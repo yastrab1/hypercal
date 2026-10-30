@@ -58,6 +58,7 @@ function ContinuousCalendar({
   const reported = useRef(props.date.getTime());
   const dimensions = useRef(0);
   const visibleIndex = useRef(center);
+  const reportedIndex = useRef(center);
   const frame = useRef(0);
   const settleRef = useRef<() => void>(() => {});
   const callbacks = useRef({ onViewportDate, onApproach });
@@ -116,6 +117,7 @@ function ContinuousCalendar({
     }
     reported.current = props.date.getTime();
     visibleIndex.current = index;
+    reportedIndex.current = index;
     setWindowIndex(
       Math.max(0, Math.min(total - count, Math.floor(index) - before)),
     );
@@ -174,6 +176,10 @@ function ContinuousCalendar({
       );
       return;
     }
+    // Programmatic month alignment can start in the previous month (e.g.
+    // Nov 1 on Sunday). Its scrollend must preserve the requested heading.
+    if (reportedIndex.current === index) return;
+    reportedIndex.current = index;
     const date = addDays(dayAt(index), month ? 3 : 0);
     if (reported.current !== date.getTime()) {
       reported.current = date.getTime();
