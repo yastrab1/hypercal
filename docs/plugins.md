@@ -1,6 +1,6 @@
 # HyperCal plugins
 
-Plugins run on the server, with settings managed from **Plugins** in the phone or web sidebar. The first installed plugin is EduPage. View creation, editing, filters, scrolling options and layout defaults are also available on phones.
+Plugins run on the server, with settings managed from **Calendar settings → Manage plugins**, also accessible from **Plugins** in the phone or web sidebar. The first installed plugin is EduPage. View creation, editing, filters, scrolling options and layout defaults are available in **Calendar settings → View settings** on both platforms.
 
 ## Automatic triggers
 

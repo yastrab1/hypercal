@@ -11,7 +11,7 @@ export function Panel({
   onClose: () => void;
   children: React.ReactNode;
   wide?: boolean;
-  variant?: "event" | "quick-event";
+  variant?: "event" | "quick-event" | "view" | "settings";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {

@@ -26,7 +26,7 @@ Avoid decorative dashboards, unnecessary cards, and hiding essential actions beh
 - Reach routine actions from the keyboard.
 - Views filter data without deleting it.
 - Be explicit about demo data, connection state, and failed writes.
-- Mobile prioritizes everyday viewing and event edits; web adds view composition.
+- Mobile and web support everyday viewing, event edits, saved-view composition, and plugin settings.
 
 ## Accessibility & Inclusion
 

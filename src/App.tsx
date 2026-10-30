@@ -1035,6 +1035,22 @@ export default function App() {
     setLayout(v.layout);
     setSidebar(false);
   };
+  const customizeLayout = (l: Layout) => {
+    setEditingView(
+      getDefaultView(views, l) || {
+        id: "",
+        name: labels[l],
+        layout: l,
+        calendarIds: calendars.map((c) => c.id),
+        include: "",
+        exclude: "",
+        hideAllDay: false,
+        isDefault: true,
+      },
+    );
+    setSidebar(false);
+    setPanel("view");
+  };
   const changeLayout = (l: Layout) => {
     hasChosenView.current = true;
     setPreview(null);
@@ -1405,7 +1421,7 @@ export default function App() {
         ]
       : []),
     {
-      name: "Connections & settings",
+      name: "Calendar settings",
       key: "",
       action: () => setPanel("settings"),
     },
@@ -1584,22 +1600,7 @@ export default function App() {
                 <button
                   className="view-edit"
                   aria-label={`Customize ${labels[l]} view`}
-                  onClick={() => {
-                    setEditingView(
-                      replacement || {
-                        id: "",
-                        name: labels[l],
-                        layout: l,
-                        calendarIds: calendars.map((c) => c.id),
-                        include: "",
-                        exclude: "",
-                        hideAllDay: false,
-                        isDefault: true,
-                      },
-                    );
-                    setSidebar(false);
-                    setPanel("view");
-                  }}
+                  onClick={() => customizeLayout(l)}
                 >
                   <Pencil size={13} />
                 </button>
@@ -2104,6 +2105,7 @@ export default function App() {
                 : "Create a custom view"
           }
           onClose={close}
+          variant="view"
         >
           <ViewEditor
             view={editingView}
@@ -2161,7 +2163,7 @@ export default function App() {
         </Panel>
       )}
       {panel === "settings" && (
-        <Panel title="Connections & settings" onClose={close}>
+        <Panel title="Calendar settings" onClose={close} variant="settings">
           <div className="settings-section">
             <span className="integration-icon">
               <CalendarDays size={26} />
@@ -2263,35 +2265,97 @@ export default function App() {
             }}
           />
           <div className="settings-divider" />
+          <section className="calendar-plugin-settings">
+            <h3>Plugins</h3>
+            <p>
+              Configure EduPage imports, destination calendars, filters and
+              automatic sync.
+            </p>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setPanel("plugins")}
+            >
+              <Puzzle size={16} />
+              Manage plugins
+            </button>
+          </section>
+          <div className="settings-divider" />
           {canEditViews && (
             <section className="layout-default-settings">
-              <h3>Default views</h3>
+              <h3>View settings</h3>
               <p>
                 Opening a layout uses its default filters. Clicking a date
                 always opens the default Day view.
               </p>
               {layouts.map((l) => (
-                <label className="field" key={l}>
-                  {labels[l]}
-                  <select
-                    aria-label={`Default ${l} view`}
-                    disabled={defaultSaving}
-                    value={getDefaultView(views, l)?.id || ""}
-                    onChange={(e) =>
-                      saveLayoutDefault(l, e.target.value || null)
-                    }
+                <div className="settings-view-choice" key={l}>
+                  <label className="field">
+                    Default {labels[l].toLowerCase()} view
+                    <select
+                      aria-label={`Default ${l} view`}
+                      disabled={defaultSaving}
+                      value={getDefaultView(views, l)?.id || ""}
+                      onChange={(e) =>
+                        saveLayoutDefault(l, e.target.value || null)
+                      }
+                    >
+                      <option value="">All calendars</option>
+                      {views
+                        .filter((v) => v.layout === l)
+                        .map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    aria-label={`Edit default ${l} view`}
+                    onClick={() => customizeLayout(l)}
                   >
-                    <option value="">All calendars</option>
-                    {views
-                      .filter((v) => v.layout === l)
-                      .map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
+                    <Pencil size={15} />
+                    Edit
+                  </button>
+                </div>
               ))}
+              {views.some((v) => !v.isDefault) && (
+                <div className="settings-saved-views">
+                  <h4>Other saved views</h4>
+                  {views
+                    .filter((v) => !v.isDefault)
+                    .map((v) => (
+                      <button
+                        type="button"
+                        className="settings-view-link"
+                        key={v.id}
+                        onClick={() => {
+                          setEditingView(v);
+                          setPanel("view");
+                        }}
+                      >
+                        <span>
+                          {v.name}
+                          <small>{labels[v.layout]}</small>
+                        </span>
+                        <Pencil size={15} />
+                      </button>
+                    ))}
+                </div>
+              )}
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setEditingView(null);
+                  setPanel("view");
+                }}
+              >
+                <Plus size={15} />
+                Create view
+              </button>
               {defaultError && (
                 <p className="form-error" role="alert">
                   {defaultError}
@@ -2323,13 +2387,6 @@ export default function App() {
               }}
             />
           </label>
-          <div className="settings-divider" />
-          <h3>Shared views</h3>
-          <p>
-            Invite friends with Google sign-in. Each member chooses calendars to
-            contribute. Open Shared views in the sidebar to create invitations
-            and read-only export links.
-          </p>
         </Panel>
       )}
       {panel === "shortcuts" && (

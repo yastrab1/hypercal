@@ -39,7 +39,7 @@ Click a date number in day, week or month view for its distance from today and i
 
 ## Plugins and mobile view settings
 
-Manage plugins from the sidebar on phone or web. EduPage imports upcoming exams and homework into a chosen Google calendar, with subject/regex exclusions, private server credentials and an isolated browser session. The default trigger is opening or returning to HyperCal; interval schedules and authenticated webhooks are optional. View settings can also be created and edited on phones. [Setup, security boundaries and extension API](docs/plugins.md).
+Open Calendar settings → Manage plugins on phone or web, or use Plugins in the sidebar. EduPage imports upcoming exams and homework into a chosen Google calendar, with subject/regex exclusions, private server credentials and an isolated browser session. The default trigger is opening or returning to HyperCal; interval schedules and authenticated webhooks are optional. View settings can also be created and edited on phones. [Setup, security boundaries and extension API](docs/plugins.md).
 
 ## Quick capture and continuous scrolling
 
