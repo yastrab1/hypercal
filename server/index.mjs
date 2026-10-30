@@ -844,6 +844,8 @@ app.delete("/api/events/:id", auth, async (req, res) => {
 });
 const viewSchema = z.object({
   continuousScroll: z.boolean().default(true),
+  continuousScrollWeb: z.boolean().optional(),
+  continuousScrollPhone: z.boolean().optional(),
   name: z.string().trim().min(1).max(60),
   layout: z.enum(["day", "week", "month", "year"]),
   calendarIds: z.array(z.string()).max(40),

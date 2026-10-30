@@ -36,6 +36,8 @@ export interface CalendarEvent {
 }
 export interface SavedView {
   continuousScroll?: boolean;
+  continuousScrollWeb?: boolean;
+  continuousScrollPhone?: boolean;
   isDefault?: boolean;
   id: string;
   name: string;

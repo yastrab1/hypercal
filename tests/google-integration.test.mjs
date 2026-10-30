@@ -406,6 +406,8 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
         name: "Private school view",
         layout: "week",
         continuousScroll: true,
+        continuousScrollWeb: true,
+        continuousScrollPhone: false,
         calendarIds: ["primary"],
         include: "exam",
         exclude: "lecture",
@@ -416,6 +418,8 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     const savedView = await view.json();
     assert.equal(savedView.visibility, "private");
     assert.equal(savedView.continuousScroll, true);
+    assert.equal(savedView.continuousScrollWeb, true);
+    assert.equal(savedView.continuousScrollPhone, false);
     const savedViews = await (
       await fetch(`${origin}/api/views`, { headers: alice })
     ).json();

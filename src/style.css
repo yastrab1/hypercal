@@ -4844,3 +4844,16 @@ button.tag-track {
 .month-week {
   contain: layout paint;
 }
+
+.scroll-options {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.scroll-options small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}

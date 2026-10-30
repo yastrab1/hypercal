@@ -9,7 +9,8 @@ import {
 } from "react";
 import { addDays, differenceInCalendarDays, startOfDay } from "date-fns";
 import { CalendarCanvas } from "./Calendar";
-import { monthRange } from "./period.mjs";
+import { monthRange, shiftPeriod } from "./period.mjs";
+import { observeMonthWheel } from "./month-wheel.mjs";
 import { observeScrollEnd } from "./scroll-end.mjs";
 
 type Props = ComponentProps<typeof CalendarCanvas> & {
@@ -61,6 +62,16 @@ function ContinuousCalendar({
   const settleRef = useRef<() => void>(() => {});
   const callbacks = useRef({ onViewportDate, onApproach });
   callbacks.current = { onViewportDate, onApproach };
+  const navigationDate = useRef(props.date);
+  navigationDate.current = props.date;
+  useEffect(() => {
+    if (!month) return;
+    return observeMonthWheel(root.current!, (step) =>
+      callbacks.current.onViewportDate(
+        shiftPeriod(navigationDate.current, "month", step),
+      ),
+    );
+  }, [month]);
   const lastApproach = useRef(-1);
   // The gutter follows the viewport media query used by CalendarCanvas,
   // not the available calendar width after the desktop sidebar is deducted.

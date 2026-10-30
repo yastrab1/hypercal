@@ -1,3 +1,6 @@
+import { continuousFor } from "./scroll-options.mjs";
+import { ScrollOptions } from "./ScrollOptions";
+import { Capacitor } from "@capacitor/core";
 import { useEventStream } from "./useEventStream";
 import {
   mergeEventChunk,
@@ -36,6 +39,8 @@ export interface SharedView {
   exclude: string;
   hideAllDay: boolean;
   continuousScroll?: boolean;
+  continuousScrollWeb?: boolean;
+  continuousScrollPhone?: boolean;
   isOwner: boolean;
   members: {
     id: string;
@@ -86,6 +91,8 @@ export function SharedSpace({
     exclude: string;
     hideAllDay: boolean;
     continuousScroll?: boolean;
+    continuousScrollWeb?: boolean;
+    continuousScrollPhone?: boolean;
   };
   onConnect: () => void;
   onClose: () => void;
@@ -109,6 +116,8 @@ export function SharedSpace({
     name?: string;
     layout?: Layout;
     continuousScroll?: boolean;
+    continuousScrollWeb?: boolean;
+    continuousScrollPhone?: boolean;
     events: CalendarEvent[];
     calendars: Calendar[];
     warnings: string[];
@@ -129,11 +138,20 @@ export function SharedSpace({
     } | null>(null);
   const surfaceRef = useRef<HTMLDivElement>(null),
     publicLoaded = useRef(false);
+  const [phone, setPhone] = useState(
+    () =>
+      Capacitor.isNativePlatform() || matchMedia("(max-width: 760px)").matches,
+  );
+  useEffect(() => {
+    const media = matchMedia("(max-width: 760px)");
+    const update = () =>
+      setPhone(Capacitor.isNativePlatform() || media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   const continuous =
     ["month", "week"].includes(layout) &&
-    !!(route.kind === "public"
-      ? data.continuousScroll
-      : view?.continuousScroll);
+    continuousFor(route.kind === "public" ? data : view, phone);
   const eventStream = useEventStream({
     enabled:
       continuous && (route.kind === "public" || (!!current && connected)),
@@ -227,7 +245,7 @@ export function SharedSpace({
   }, [manage, preview, expanded, publicMode, current, move, onClose]);
   usePeriodGesture(
     surfaceRef,
-    !continuous &&
+    (!continuous || layout === "month") &&
       window.innerWidth <= 760 &&
       (publicMode || !!current) &&
       !manage &&
@@ -1001,7 +1019,9 @@ function SharedSettings({
                 include: f.get("include"),
                 exclude: f.get("exclude"),
                 hideAllDay: f.get("hideAllDay") === "on",
-                continuousScroll: f.get("continuousScroll") === "on",
+                continuousScroll: f.get("continuousScrollWeb") === "on",
+                continuousScrollWeb: f.get("continuousScrollWeb") === "on",
+                continuousScrollPhone: f.get("continuousScrollPhone") === "on",
               });
             }}
           >
@@ -1023,20 +1043,7 @@ function SharedSettings({
                 ))}
               </select>
             </label>
-            <label className="checkbox-field continuous-option">
-              <input
-                type="checkbox"
-                name="continuousScroll"
-                defaultChecked={view.continuousScroll ?? true}
-              />
-              <span>
-                Continuous scrolling{" "}
-                <small>
-                  Experimental. Month snaps by week row; week scrolls through
-                  individual days.
-                </small>
-              </span>
-            </label>
+            <ScrollOptions view={view} layout={view.layout} />
             <label className="field">
               Only show matching
               <input

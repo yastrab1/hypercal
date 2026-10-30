@@ -117,10 +117,17 @@ test("shared API enforces identities, contributions, member removal and independ
       "/shared-views",
       alice,
       "POST",
-      { name: "Together", layout: "month" },
+      {
+        name: "Together",
+        layout: "month",
+        continuousScrollWeb: true,
+        continuousScrollPhone: false,
+      },
       201,
     );
     const base = "/shared-views/" + created.id;
+    assert.equal(created.continuousScrollWeb, true);
+    assert.equal(created.continuousScrollPhone, false);
     assert.equal(created.members.length, 1);
     assert.deepEqual(created.members[0].contributions, []);
     await call(base, bob, "GET", undefined, 404);
@@ -201,6 +208,8 @@ test("shared API enforces identities, contributions, member removal and independ
     const shareToken = new URL(link.url).hash.slice("#share=".length);
     const publicPath = "/shared-links/" + shareToken;
     const publicResult = await call(publicPath + query, undefined);
+    assert.equal(publicResult.continuousScrollWeb, true);
+    assert.equal(publicResult.continuousScrollPhone, false);
     assert.equal(publicResult.events.length, 1);
     assert.equal(publicResult.events[0].title, "Busy");
     for (const privateText of [

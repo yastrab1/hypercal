@@ -6,6 +6,8 @@ import { allPages, normalizeEvent } from "./google.mjs";
 import { filterEvents } from "../src/domain.mjs";
 const definition = z.object({
   continuousScroll: z.boolean().default(true),
+  continuousScrollWeb: z.boolean().optional(),
+  continuousScrollPhone: z.boolean().optional(),
   name: z.string().trim().min(1).max(60),
   layout: z.enum(["day", "week", "month", "year"]),
   include: z.string().max(500).default(""),
@@ -46,6 +48,8 @@ export function sharedInfo(v, user) {
     exclude: v.exclude,
     hideAllDay: v.hideAllDay,
     continuousScroll: !!v.continuousScroll,
+    continuousScrollWeb: v.continuousScrollWeb,
+    continuousScrollPhone: v.continuousScrollPhone,
     isOwner: owner,
     members: Object.entries(v.members).map(([id, m]) => ({
       id,
@@ -381,6 +385,8 @@ export function registerSharedViews(app, auth, appUrl) {
       name: v.name,
       layout: v.layout,
       continuousScroll: !!v.continuousScroll,
+      continuousScrollWeb: v.continuousScrollWeb,
+      continuousScrollPhone: v.continuousScrollPhone,
       ...data,
     });
   });

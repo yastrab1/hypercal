@@ -1,3 +1,5 @@
+import { continuousFor } from "./scroll-options.mjs";
+import { ScrollOptions } from "./ScrollOptions";
 import { useEventStream } from "./useEventStream";
 import {
   mergeEventChunk,
@@ -540,7 +542,8 @@ export default function App() {
   }
   const active = views.find((v) => v.id === activeView);
   const continuous =
-    (active?.continuousScroll ?? true) && ["month", "week"].includes(layout);
+    continuousFor(active, !desktop || Capacitor.isNativePlatform()) &&
+    ["month", "week"].includes(layout);
   const bufferedRange = continuousRange(date, layout);
   const selection = active ? active.calendarIds : visible;
   const from = continuous
@@ -954,7 +957,12 @@ export default function App() {
   );
   usePeriodGesture(
     surfaceRef,
-    !continuous && !desktop && !sidebar && !panel && !preview && !expandedDay,
+    (!continuous || layout === "month") &&
+      !desktop &&
+      !sidebar &&
+      !panel &&
+      !preview &&
+      !expandedDay,
     move,
     setPeriodPreview,
   );
@@ -1368,6 +1376,8 @@ export default function App() {
           exclude: active?.exclude || "",
           hideAllDay: active?.hideAllDay || false,
           continuousScroll: active?.continuousScroll ?? true,
+          continuousScrollWeb: continuousFor(active, false),
+          continuousScrollPhone: continuousFor(active, true),
         }}
         onConnect={connectGoogle}
         onClose={() => {
@@ -2402,7 +2412,9 @@ function ViewEditor({
             hideAllDay: f.get("hideAllDay") === "on",
             continuousScroll:
               ["month", "week"].includes(viewLayout) &&
-              f.get("continuousScroll") === "on",
+              f.get("continuousScrollWeb") === "on",
+            continuousScrollWeb: f.get("continuousScrollWeb") === "on",
+            continuousScrollPhone: f.get("continuousScrollPhone") === "on",
             isDefault: f.get("isDefault") === "on",
           });
         } catch (e) {
@@ -2451,21 +2463,7 @@ function ViewEditor({
           Use as the default {labels[viewLayout].toLowerCase()} view
         </label>
         {["month", "week"].includes(viewLayout) && (
-          <label className="checkbox-field continuous-option">
-            <input
-              type="checkbox"
-              name="continuousScroll"
-              defaultChecked={view?.continuousScroll ?? true}
-            />
-            <span>
-              Continuous scrolling{" "}
-              <small>
-                {viewLayout === "month"
-                  ? "Scroll vertically and snap to the nearest week row."
-                  : "Scroll horizontally through individual days, without returning to Monday."}
-              </small>
-            </span>
-          </label>
+          <ScrollOptions view={view} layout={viewLayout} />
         )}
         <span className="field-label">Include calendars</span>
         <div className="view-calendar-picker">
