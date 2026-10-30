@@ -17,7 +17,7 @@ COPY server ./server
 COPY worker/edupage.mjs ./worker/edupage.mjs
 COPY --from=build /app/src/*.mjs ./src/
 COPY --from=build /app/dist ./dist
-RUN mkdir -p /data /app/dist/downloads && chown node:node /data
+RUN mkdir -p /data /worker-auth /app/dist/downloads && chown node:node /data /worker-auth
 USER node
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"

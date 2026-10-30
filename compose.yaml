@@ -14,6 +14,7 @@ services:
       PORT: 3001
       DATA_DIR: /data
       BROWSER_WORKER_URL: http://hypercal-browser:3002
+      BROWSER_WORKER_TOKEN_FILE: /worker-auth/token
       APP_URL: ${APP_URL:-http://localhost:3791}
       TRUST_PROXY: ${TRUST_PROXY:-1}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
@@ -21,6 +22,7 @@ services:
       - 127.0.0.1:${HYPERCAL_PORT:-3791}:3001
     volumes:
       - hypercal-data:/data
+      - hypercal-worker-auth:/worker-auth
       - ./dist/downloads:/app/dist/downloads:ro
     read_only: true
     tmpfs:
@@ -45,9 +47,9 @@ services:
         required: false
     volumes:
       - hypercal-browser:/profiles
-      - hypercal-data:/data:ro
+      - hypercal-worker-auth:/run/auth:ro
     environment:
-      WORKER_TOKEN_FILE: /data/browser-worker-token
+      WORKER_TOKEN_FILE: /run/auth/token
     read_only: true
     tmpfs:
       - /tmp:mode=1777,size=512m
@@ -62,3 +64,4 @@ services:
 volumes:
   hypercal-data:
   hypercal-browser:
+  hypercal-worker-auth:

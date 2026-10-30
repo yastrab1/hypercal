@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OAuth2Client } from "google-auth-library";
@@ -45,6 +45,7 @@ test("plugin API scopes credentials and writes to their owner, authenticates hoo
     GOOGLE_CLIENT_ID: "test",
     GOOGLE_CLIENT_SECRET: "test",
     GOOGLE_CREDENTIALS_FILE: "",
+    BROWSER_WORKER_TOKEN_FILE: join(directory, "isolated-worker-token"),
     BROWSER_WORKER_URL: `http://127.0.0.1:${worker.address().port}`,
     EDUPAGE_OWNER_EMAIL: "alice@example.test",
     EDUPAGE_USERNAME: "test-user-not-a-real-secret",
@@ -80,6 +81,10 @@ test("plugin API scopes credentials and writes to their owner, authenticates hoo
     return { data: options.data };
   };
   const { server } = await import("../server/index.mjs");
+  assert.equal(
+    (await stat(join(directory, "isolated-worker-token"))).mode & 0o777,
+    0o600,
+  );
   if (!server.listening)
     await new Promise((resolve) => server.once("listening", resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;

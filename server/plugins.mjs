@@ -42,7 +42,9 @@ const configSchema = z.object({
   webhookEnabled: z.boolean().default(false),
 });
 function workerToken() {
-  const file = resolve(dataDir, "browser-worker-token");
+  const file =
+    process.env.BROWSER_WORKER_TOKEN_FILE ||
+    resolve(dataDir, "browser-worker-token");
   if (!existsSync(file))
     writeFileSync(file, randomBytes(32).toString("hex"), {
       mode: 0o600,

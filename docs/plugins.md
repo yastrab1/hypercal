@@ -45,7 +45,7 @@ Both `compose.yaml` and `deploy/unified/docker-compose.hypercal.yml` define the 
 - Private persistent browser sessions and a private shared worker-token file under the existing data directory.
 - Navigation restricted to HTTPS EduPage domains, with service workers and downloads disabled.
 
-For the unified stack, copy `deploy/browser-seccomp.json` beside the Compose file. Create `.data/plugin-browser` owned by the app UID, mode `0700`, and `.data/browser-worker-token` containing a random secret, mode `0600`; HyperCal also generates the token automatically on startup. Start/recreate only the two HyperCal services. In standalone Compose, start the app first to initialize the shared data volume/token before starting the browser worker.
+For the unified stack, copy `deploy/browser-seccomp.json` beside the Compose file. Create `.data/plugin-browser` owned by the app UID, mode `0700`, and `.data/browser-worker-token` containing a random secret, mode `0600`; HyperCal also generates the token automatically on startup. Start/recreate only the two HyperCal services. Standalone Compose uses a separate worker-auth volume, so the browser never mounts the account database or Google OAuth storage. The browser waits for the app to initialize the token before starting.
 
 ## Extending the system
 
