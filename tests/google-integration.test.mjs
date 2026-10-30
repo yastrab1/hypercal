@@ -43,6 +43,7 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
   const upstream = [];
   const copies = [];
   let rejectPatch = false;
+  let eventReads = 0;
   const originalRequest = OAuth2Client.prototype.request;
   // Exercise the entire HTTP API while replacing only the external provider boundary.
   OAuth2Client.prototype.request = async function (options) {
@@ -90,8 +91,10 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
           ],
         },
       };
-    if (path === "/calendar/v3/calendars/primary/events" && method === "GET")
+    if (path === "/calendar/v3/calendars/primary/events" && method === "GET") {
+      eventReads++;
       return { data: { items: structuredClone(upstream) } };
+    }
     if (path === "/calendar/v3/calendars/primary/events" && method === "POST") {
       const event = { ...body, id: "event1", etag: '"v1"' };
       upstream.push(event);
@@ -299,6 +302,31 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     assert.equal(fromGoogle.events[0].color, draft.color);
     assert.deepEqual(fromGoogle.events[0].tags, ["Exam"]);
     assert.equal(fromGoogle.events[0].etag, '"v1"');
+    const cachedReads = eventReads;
+    upstream[0].summary = "External Google edit after caching";
+    const cached = await (
+      await fetch(`${origin}/api/events?${q}`, { headers: alice })
+    ).json();
+    assert.equal(cached.events[0].title, "Changed from Google Calendar");
+    assert.equal(
+      eventReads,
+      cachedReads,
+      "scrolling reuses the persisted provider range",
+    );
+    const refresh = await fetch(`${origin}/api/cache/refresh`, {
+      method: "POST",
+      headers: alice,
+    });
+    assert.equal(refresh.status, 200);
+    const refreshed = await (
+      await fetch(`${origin}/api/events?${q}`, { headers: alice })
+    ).json();
+    assert.equal(
+      refreshed.events[0].title,
+      "External Google edit after caching",
+    );
+    assert.equal(eventReads, cachedReads + 1);
+    upstream[0].summary = "Changed from Google Calendar";
     upstream[0].recurringEventId = "series1";
     upstream[0].attendees = [{ email: "friend@example.test" }];
     async function copyTo(destinationCalendarId, etag = '"v1"') {

@@ -1027,7 +1027,7 @@ function SharedSettings({
               <input
                 type="checkbox"
                 name="continuousScroll"
-                defaultChecked={view.continuousScroll}
+                defaultChecked={view.continuousScroll ?? true}
               />
               <span>
                 Continuous scrolling{" "}

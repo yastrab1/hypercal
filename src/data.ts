@@ -45,6 +45,7 @@ export const initialViews: SavedView[] = [
     id: "monthly-highlights",
     name: "Monthly highlights",
     layout: "month",
+    continuousScroll: true,
     calendarIds: ["personal", "projects", "life"],
     include: "",
     exclude: "",

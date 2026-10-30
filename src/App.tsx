@@ -540,7 +540,7 @@ export default function App() {
   }
   const active = views.find((v) => v.id === activeView);
   const continuous =
-    !!active?.continuousScroll && ["month", "week"].includes(layout);
+    (active?.continuousScroll ?? true) && ["month", "week"].includes(layout);
   const bufferedRange = continuousRange(date, layout);
   const selection = active ? active.calendarIds : visible;
   const from = continuous
@@ -762,6 +762,15 @@ export default function App() {
       setBootError((e as Error).message);
     }
   }, []);
+  async function manualSync() {
+    try {
+      if (live && navigator.onLine)
+        await api("/cache/refresh", { method: "POST" });
+      await requestSync();
+    } catch (error) {
+      setError((error as Error).message);
+    }
+  }
   useEffect(() => {
     requestSync();
     if (new URLSearchParams(location.search).has("authError")) {
@@ -1358,7 +1367,7 @@ export default function App() {
           include: active?.include || "",
           exclude: active?.exclude || "",
           hideAllDay: active?.hideAllDay || false,
-          continuousScroll: !!active?.continuousScroll,
+          continuousScroll: active?.continuousScroll ?? true,
         }}
         onConnect={connectGoogle}
         onClose={() => {
@@ -1747,7 +1756,7 @@ export default function App() {
               busy={busy || (continuous && eventStream.busy)}
               cached={usingCache}
               online={online}
-              onRefresh={requestSync}
+              onRefresh={manualSync}
             />
             <button
               className="icon-button"
@@ -1784,7 +1793,7 @@ export default function App() {
               busy={busy || (continuous && eventStream.busy)}
               cached={usingCache}
               online={online}
-              onRefresh={requestSync}
+              onRefresh={manualSync}
             />
             <button
               className="icon-button"
@@ -2446,12 +2455,11 @@ function ViewEditor({
             <input
               type="checkbox"
               name="continuousScroll"
-              defaultChecked={view?.continuousScroll}
+              defaultChecked={view?.continuousScroll ?? true}
             />
             <span>
               Continuous scrolling{" "}
               <small>
-                Experimental.{" "}
                 {viewLayout === "month"
                   ? "Scroll vertically and snap to the nearest week row."
                   : "Scroll horizontally through individual days, without returning to Monday."}

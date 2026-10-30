@@ -35,6 +35,7 @@ import {
   googleRequest,
   allPages,
   normalizeEvent,
+  invalidateGoogleCache,
 } from "./google.mjs";
 const tagCache = new TagCache(resolve(dataDir, "tagged-events"));
 const tagRefreshes = new Map();
@@ -556,6 +557,10 @@ app.get("/api/tag-countdowns", auth, async (req, res) => {
     refreshing: state.running,
   });
 });
+app.post("/api/cache/refresh", auth, async (req, res) => {
+  await invalidateGoogleCache(req.session.accountId);
+  res.json({ ok: true });
+});
 app.get("/api/calendars", auth, async (req, res) => {
   const items = await allPages(
     req.session.accountId,
@@ -838,7 +843,7 @@ app.delete("/api/events/:id", auth, async (req, res) => {
   res.json(result);
 });
 const viewSchema = z.object({
-  continuousScroll: z.boolean().default(false),
+  continuousScroll: z.boolean().default(true),
   name: z.string().trim().min(1).max(60),
   layout: z.enum(["day", "week", "month", "year"]),
   calendarIds: z.array(z.string()).max(40),

@@ -41,7 +41,13 @@ Click a date number in day, week or month view for its distance from today and i
 
 New events use a compact capture dialog (a bottom sheet on phones). Type `@` to fuzzy-find a writable calendar, then use the arrow keys and Enter to select it. Dates such as `tmrw`, `in 2 days`, `mon`, and `11.2` are interpreted before saving; the date chip shows the exact result. Numeric dates use day.month and the next occurrence when no year is supplied. Remove the date chip to keep the phrase as literal title text. **More details** opens times, tags, reminders and other fields. Existing event titles are edited literally.
 
-In the web view editor, enable **Continuous scrolling** for a month or week view. Months scroll vertically and settle onto week rows; weeks scroll horizontally through individual days. Nearby events load in the background, with cached ranges shown first. Scrolling keeps working while requests are pending. The setting also applies to that view on Android and when shared.
+**Continuous scrolling** is enabled for built-in month/week layouts and new views. Existing saved views keep their preference; enable it in the web view editor if an older view still pages. Months scroll vertically and settle onto week rows after the gesture ends; weeks scroll horizontally and settle onto individual days without returning to Monday. Nearby events load in the background, with cached ranges shown first. Scrolling keeps working while requests are pending. The setting also applies to that view on Android and when shared.
+
+### R2D2 provider cache
+
+Google event ranges are cached in `DATA_DIR/google-read-cache` on the persistent server volume for five minutes; calendar lists for one minute. Reopening the app or revisiting a range reuses the same cache, including after a server restart. The cache is isolated by Google account, capped at 512 entries / 64 MiB, and uses private file permissions. Uncached provider reads are limited to four concurrent requests, with a one-minute pause after Google quota errors. Shared-view permission checks still query Google directly.
+
+HyperCal writes invalidate that account’s provider cache before and after the write. The top-bar refresh button clears it explicitly, so external Google edits can be fetched immediately; otherwise they appear after the cache expires. Cached data never bypasses HyperCal sign-in or shared-view access checks.
 
 ## Performance
 

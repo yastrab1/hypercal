@@ -5,7 +5,7 @@ import { dataDir, getAccount } from "./store.mjs";
 import { allPages, normalizeEvent } from "./google.mjs";
 import { filterEvents } from "../src/domain.mjs";
 const definition = z.object({
-  continuousScroll: z.boolean().default(false),
+  continuousScroll: z.boolean().default(true),
   name: z.string().trim().min(1).max(60),
   layout: z.enum(["day", "week", "month", "year"]),
   include: z.string().max(500).default(""),
@@ -81,14 +81,11 @@ export function publicEvent(event, calendarId, id, policy) {
     source: "google",
   };
 }
-const cache = new Map();
 async function sourceEvents(accountId, calendarId, from, to) {
-  const key = JSON.stringify([accountId, calendarId, from, to]);
-  const hit = cache.get(key);
-  if (hit && hit.expires > Date.now()) return hit.data;
   const calendars = await allPages(
     accountId,
     "users/me/calendarList?maxResults=250",
+    { cache: false },
   );
   const c = calendars.find((c) => c.id === calendarId);
   if (!c) throw new Error("Calendar is no longer available.");
@@ -109,8 +106,6 @@ async function sourceEvents(accountId, calendarId, from, to) {
       .filter((e) => e.status !== "cancelled" && e.start && e.end)
       .map((e) => normalizeEvent(e, c)),
   };
-  if (cache.size >= 200) cache.delete(cache.keys().next().value);
-  cache.set(key, { expires: Date.now() + 60000, data });
   return data;
 }
 export async function aggregateShared(
@@ -287,6 +282,7 @@ export function registerSharedViews(app, auth, appUrl) {
       ? await allPages(
           req.session.accountId,
           "users/me/calendarList?maxResults=250",
+          { cache: false },
         )
       : [];
     if (selected.some((c) => !available.some((a) => a.id === c.calendarId)))
@@ -381,14 +377,12 @@ export function registerSharedViews(app, auth, appUrl) {
     const { from, to } = range.parse(req.query);
     const data = await aggregateShared(v, from, to, true);
     ensureUnchanged(v, store.publicView(req.params.token, "web"));
-    res
-      .set("Cache-Control", "no-store")
-      .json({
-        name: v.name,
-        layout: v.layout,
-        continuousScroll: !!v.continuousScroll,
-        ...data,
-      });
+    res.set("Cache-Control", "no-store").json({
+      name: v.name,
+      layout: v.layout,
+      continuousScroll: !!v.continuousScroll,
+      ...data,
+    });
   });
   app.get("/api/shared-links/:token/calendar.ics", async (req, res) => {
     const v = store.publicView(req.params.token, "ical");

@@ -10,6 +10,7 @@ import {
 import { addDays, differenceInCalendarDays, startOfDay } from "date-fns";
 import { CalendarCanvas } from "./Calendar";
 import { monthRange } from "./period.mjs";
+import { observeScrollEnd } from "./scroll-end.mjs";
 
 type Props = ComponentProps<typeof CalendarCanvas> & {
   continuous?: boolean;
@@ -56,8 +57,8 @@ function ContinuousCalendar({
   const reported = useRef(props.date.getTime());
   const dimensions = useRef(0);
   const visibleIndex = useRef(center);
-  const frame = useRef(0),
-    timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const frame = useRef(0);
+  const settleRef = useRef<() => void>(() => {});
   const callbacks = useRef({ onViewportDate, onApproach });
   callbacks.current = { onViewportDate, onApproach };
   const lastApproach = useRef(-1);
@@ -117,13 +118,13 @@ function ContinuousCalendar({
       currentIndex !== null ? dayAt(currentIndex) : target,
     );
   }, [props.date.getTime(), unit]);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const stop = observeScrollEnd(root.current!, () => settleRef.current());
+    return () => {
       cancelAnimationFrame(frame.current);
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
+      stop();
+    };
+  }, []);
   const position = () => {
     const element = root.current!;
     return Math.max(
@@ -168,6 +169,7 @@ function ContinuousCalendar({
       callbacks.current.onViewportDate(date);
     }
   };
+  settleRef.current = settled;
   const scroll = () => {
     if (!frame.current)
       frame.current = requestAnimationFrame(() => {
@@ -186,8 +188,6 @@ function ContinuousCalendar({
           callbacks.current.onApproach?.(dayAt(index));
         }
       });
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(settled, 180);
   };
   return (
     <div
