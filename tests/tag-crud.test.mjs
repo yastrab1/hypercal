@@ -45,7 +45,11 @@ test("tag rename/delete update provider metadata, cached assignments and per-vie
             { name: "Exam", color: "#4b99d2" },
             { name: "Other", color: "#55b080" },
           ],
-          tagTracking: { "layout:month": "Exam", "layout:week": "Other" },
+          tagTracking: {
+            "layout:month": "Exam",
+            "layout:week": "Other",
+            "layout:day": ["Exam", "Other"],
+          },
         },
         bob: {
           email: "bob@example.test",
@@ -126,6 +130,10 @@ test("tag rename/delete update provider metadata, cached assignments and per-vie
     assert.equal(renamed.status, 200);
     assert.equal(renamed.data.tracking["layout:month"], "Final exam");
     assert.equal(renamed.data.tracking["layout:week"], "Other");
+    assert.deepEqual(renamed.data.tracking["layout:day"], [
+      "Final exam",
+      "Other",
+    ]);
     async function wait() {
       for (let i = 0; i < 100; i++) {
         const s = await (
@@ -145,6 +153,7 @@ test("tag rename/delete update provider metadata, cached assignments and per-vie
     const removed = await change("Final exam", null, "DELETE");
     assert.equal(removed.status, 200);
     assert.equal(removed.data.tracking["layout:month"], null);
+    assert.deepEqual(removed.data.tracking["layout:day"], ["Other"]);
     await wait();
     assert.equal(event.extendedProperties.shared.hypercalTags, "[]");
     assert(!calls.some((c) => c.method === "DELETE"));

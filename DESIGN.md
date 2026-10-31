@@ -17,3 +17,5 @@ System sans typography. Desktop sidebar 256px, compact single-row date/navigatio
 Keyboard shortcuts and a command palette are primary controls. Explicit editor focus, visible focus indicators, dialog focus trapping and escape-to-close. Errors, pending writes, demo mode and connection states remain explicit. No decorative images or animation.
 
 View and plugin management are available through Calendar settings on web and Android. View editors retain the full filtering and per-device scrolling controls on phones, with visible touch targets. Shared-view management remains in the sidebar.
+
+Per-view tracked tags support multiple countdown pills, arranged from right to left in a single scrollable rail. Phones use the top inset to the right of the centered camera cutout; the date/navigation row retains its width.

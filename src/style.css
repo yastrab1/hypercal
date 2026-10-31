@@ -5119,3 +5119,51 @@ button.tag-track {
     min-height: 44px;
   }
 }
+
+/* Countdown rail: first tracked tag is at the right edge. Overflow stays
+   scrollable instead of squeezing the date or growing the toolbar. */
+.header-tag-countdowns {
+  flex: 0 1 auto;
+  flex-direction: row-reverse;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  max-width: 40vw;
+  margin-left: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+.header-tag-countdowns .tag-countdown {
+  flex: none;
+}
+@media (max-width: 760px) {
+  :root {
+    --mobile-top-inset: max(
+      32px,
+      var(--camera-inset-top, 0px),
+      env(safe-area-inset-top, 0px)
+    );
+  }
+  .topbar {
+    position: relative;
+  }
+  .topbar .header-tag-countdowns {
+    position: absolute;
+    top: 2px;
+    right: max(10px, env(safe-area-inset-right, 0px));
+    width: calc(50% - 34px);
+    max-width: calc(50% - 34px);
+    height: calc(var(--mobile-top-inset) - 4px);
+    margin: 0;
+    gap: 5px;
+    scrollbar-width: none;
+    flex-basis: auto;
+  }
+  .header-tag-countdowns .tag-countdown {
+    min-width: 32px;
+    padding: 2px 7px;
+    font-size: 12px;
+    line-height: 18px;
+  }
+}

@@ -22,6 +22,15 @@ public class MainActivity extends BridgeActivity {
             int keyboard = insets.isVisible(WindowInsetsCompat.Type.ime())
                 ? insets.getInsets(WindowInsetsCompat.Type.ime()).bottom : 0;
             view.setPadding(0, 0, 0, keyboard);
+            // Immersive mode hides system bars, but the camera still occupies
+            // physical pixels. Expose its height to the countdown inset rail.
+            int cutoutTop = insets.getDisplayCutout() == null ? 0
+                : insets.getDisplayCutout().getSafeInsetTop();
+            float insetCss = cutoutTop / getResources().getDisplayMetrics().density;
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                getBridge().getWebView().post(() -> getBridge().getWebView().evaluateJavascript(
+                    "document.documentElement.style.setProperty('--camera-inset-top','" + insetCss + "px')", null));
+            }
             return new WindowInsetsCompat.Builder(insets)
                 .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.NONE)
                 .build();
@@ -43,7 +52,10 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) useFullScreen();
+        if (hasFocus) {
+            useFullScreen();
+            ViewCompat.requestApplyInsets(getWindow().getDecorView());
+        }
     }
 
     private void useFullScreen() {

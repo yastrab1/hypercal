@@ -136,7 +136,17 @@ export function registerTagCrud(app, auth, cache, invalidate) {
       tagTracking: Object.fromEntries(
         Object.entries(account.tagTracking || {}).map(([key, value]) => [
           key,
-          value === from ? to : value,
+          Array.isArray(value)
+            ? [
+                ...new Set(
+                  value
+                    .map((name) => (name === from ? to : name))
+                    .filter(Boolean),
+                ),
+              ]
+            : value === from
+              ? to
+              : value,
         ]),
       ),
       tagAliases: aliases,

@@ -211,3 +211,5 @@ Single-key shortcuts can be disabled in settings. Within form fields and focused
 ## License
 
 [MIT](LICENSE). Google Calendar is a Google product; HyperCal is an independent interface and is not affiliated with or endorsed by Google.
+
+Track multiple tags per view by toggling their eye icons in the sidebar. Colored countdowns fill the toolbar from right to left; on phones they occupy the inset beside the camera, with horizontal scrolling for overflow. Existing single-tag selections are preserved.

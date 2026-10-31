@@ -342,10 +342,11 @@ app.get("/api/tag-tracking", auth, (req, res) =>
   res.json(getAccount(req.session.accountId).tagTracking || {}),
 );
 app.put("/api/tag-tracking", auth, (req, res) => {
-  const { viewKey, tagName } = z
+  const { viewKey, tagName, tagNames } = z
     .object({
       viewKey: z.string().max(120),
-      tagName: z.string().max(60).nullable(),
+      tagName: z.string().max(60).nullable().optional(),
+      tagNames: z.array(z.string().min(1).max(60)).max(40).optional(),
     })
     .parse(req.body);
   const account = getAccount(req.session.accountId);
@@ -353,9 +354,15 @@ app.put("/api/tag-tracking", auth, (req, res) => {
     return res
       .status(400)
       .json({ error: "Choose one of your calendar views." });
-  if (tagName && !(account.tags || []).some((t) => t.name === tagName))
+  if (tagNames === undefined && tagName === undefined)
+    return res.status(400).json({ error: "Choose tags to track." });
+  const names = tagNames || (tagName ? [tagName] : []);
+  if (names.some((name) => !(account.tags || []).some((t) => t.name === name)))
     return res.status(400).json({ error: "Choose an existing tag." });
-  const tracking = { ...account.tagTracking, [viewKey]: tagName };
+  const tracking = {
+    ...account.tagTracking,
+    [viewKey]: tagNames ? [...new Set(tagNames)] : tagName,
+  };
   upsertAccount(req.session.accountId, { tagTracking: tracking });
   res.json(tracking);
 });
@@ -400,11 +407,18 @@ app.get("/api/tag-countdowns", auth, async (req, res) => {
     return res
       .status(400)
       .json({ error: "Choose one of your calendar views." });
-  const trackedName = account.tagTracking?.[viewKey];
-  const tags = (account.tags || []).filter((t) => t.name === trackedName);
+  const trackedValue = account.tagTracking?.[viewKey];
+  const trackedNames = Array.isArray(trackedValue)
+    ? trackedValue
+    : trackedValue
+      ? [trackedValue]
+      : [];
+  const tags = (account.tags || []).filter((t) =>
+    trackedNames.includes(t.name),
+  );
   if (!tags.length)
     return res.json({ next: {}, warnings: [], refreshing: false });
-  const refreshKey = JSON.stringify([id, trackedName]);
+  const refreshKey = JSON.stringify([id, [...trackedNames].sort()]);
   const state = tagRefreshes.get(refreshKey) || {
     checkedAt: 0,
     warnings: [],
@@ -474,7 +488,9 @@ app.get("/api/tag-countdowns", auth, async (req, res) => {
                     getAccount(id).tagAliases,
                   ),
                 }))
-                .filter((e) => e.tags?.includes(trackedName)),
+                .filter((e) =>
+                  trackedNames.some((name) => e.tags?.includes(name)),
+                ),
             );
           });
         let cursor = 0;
@@ -502,22 +518,31 @@ app.get("/api/tag-countdowns", auth, async (req, res) => {
           if (
             new Date(event.end) <= new Date() ||
             event.source !== "google" ||
-            !event.tags.includes(trackedName) ||
+            !trackedNames.some((name) => event.tags.includes(name)) ||
             !state.allowed.includes(event.calendarId)
           )
             continue;
-          const list = candidates.get(event.calendarId) || [];
-          if (list.length < 2) list.push(event);
-          candidates.set(event.calendarId, list);
-        }
-        for (const cached of [...candidates.values()]
-          .flat()
-          .filter(
-            (e) =>
-              e.source === "google" &&
-              e.tags.includes(trackedName) &&
-              state.allowed.includes(e.calendarId),
+          for (const name of trackedNames.filter((name) =>
+            event.tags.includes(name),
           )) {
+            const key = JSON.stringify([event.calendarId, name]);
+            const list = candidates.get(key) || [];
+            if (list.length < 2) list.push(event);
+            candidates.set(key, list);
+          }
+        }
+        for (const cached of [
+          ...new Map(
+            [...candidates.values()]
+              .flat()
+              .map((e) => [JSON.stringify([e.calendarId, e.id]), e]),
+          ).values(),
+        ].filter(
+          (e) =>
+            e.source === "google" &&
+            trackedNames.some((name) => e.tags.includes(name)) &&
+            state.allowed.includes(e.calendarId),
+        )) {
           try {
             const fresh = await googleRequest(
               id,
@@ -554,13 +579,18 @@ app.get("/api/tag-countdowns", auth, async (req, res) => {
   const allowed = state.allowed || [
     ...new Set(tagCache.events(id).map((e) => e.calendarId)),
   ];
-  const nextEvent = tagCache.nearest(id, trackedName, allowed);
   res.json({
-    next: {
-      [trackedName]: nextEvent
-        ? { start: nextEvent.start, end: nextEvent.end, title: nextEvent.title }
-        : null,
-    },
+    next: Object.fromEntries(
+      tags.map((tag) => {
+        const event = tagCache.nearest(id, tag.name, allowed);
+        return [
+          tag.name,
+          event
+            ? { start: event.start, end: event.end, title: event.title }
+            : null,
+        ];
+      }),
+    ),
     warnings: state.warnings,
     refreshing: state.running,
   });

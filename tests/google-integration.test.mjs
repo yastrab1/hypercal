@@ -235,6 +235,29 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       ).json(),
       { "layout:month": "Holiday", "layout:week": "Holiday" },
     );
+    const multi = await fetch(`${origin}/api/tag-tracking`, {
+      method: "PUT",
+      headers: alice,
+      body: JSON.stringify({
+        viewKey: "layout:month",
+        tagNames: ["Exam", "Holiday", "Exam"],
+      }),
+    });
+    assert.equal(multi.status, 200);
+    assert.deepEqual((await multi.json())["layout:month"], ["Exam", "Holiday"]);
+    assert.equal(
+      (
+        await fetch(`${origin}/api/tag-tracking`, {
+          method: "PUT",
+          headers: alice,
+          body: JSON.stringify({
+            viewKey: "layout:month",
+            tagNames: ["Missing"],
+          }),
+        })
+      ).status,
+      400,
+    );
     assert.equal((await track("layout:month", "Exam")).status, 200);
     const duplicateTags = await fetch(`${origin}/api/tags`, {
       method: "PUT",
@@ -280,6 +303,20 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     assert.equal(countdowns.refreshing, false);
     assert.match(countdowns.next.Exam.start, /^2027-01-20/);
     assert.deepEqual(countdowns.warnings, []);
+    await fetch(`${origin}/api/tag-tracking`, {
+      method: "PUT",
+      headers: alice,
+      body: JSON.stringify({
+        viewKey: "layout:month",
+        tagNames: ["Exam", "Holiday"],
+      }),
+    });
+    const multiCountdowns = await (
+      await fetch(`${origin}/api/tag-countdowns`, { headers: alice })
+    ).json();
+    assert.match(multiCountdowns.next.Exam.start, /^2027-01-20/);
+    assert.equal(multiCountdowns.next.Holiday, null);
+    await track("layout:month", "Exam");
     assert.equal(
       upstream[0].extendedProperties.private.hypercalColor,
       draft.color,

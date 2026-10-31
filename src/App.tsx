@@ -210,9 +210,9 @@ export default function App() {
       : null,
   );
   const [tags, setTags] = useState<Tag[]>([]);
-  const [tagTracking, setTagTracking] = useState<Record<string, string | null>>(
-    {},
-  );
+  const [tagTracking, setTagTracking] = useState<
+    Record<string, string[] | string | null>
+  >({});
   const [calendarsCollapsed, setCalendarsCollapsed] = useState(() =>
     stored("hypercal.calendarsCollapsed", true),
   );
@@ -421,7 +421,12 @@ export default function App() {
   const canWrite = verified && online && !syncFailed;
   const tagAccount = session?.user?.id || "demo";
   const tagViewKey = activeView ? `view:${activeView}` : `layout:${layout}`;
-  const trackedTag = tagTracking[tagViewKey] || null;
+  const trackedValue = tagTracking[tagViewKey];
+  const trackedTags = Array.isArray(trackedValue)
+    ? trackedValue
+    : trackedValue
+      ? [trackedValue]
+      : [];
   useEffect(() => {
     setTags(stored<Tag[]>(`hypercal.tags.${tagAccount}`, []));
     setTagTracking(stored(`hypercal.tagTracking.${tagAccount}`, {}));
@@ -429,7 +434,7 @@ export default function App() {
     let cancelled = false;
     Promise.all([
       api<Tag[]>("/tags"),
-      api<Record<string, string | null>>("/tag-tracking"),
+      api<Record<string, string[] | string | null>>("/tag-tracking"),
     ])
       .then(([values, tracking]) => {
         if (cancelled) return;
@@ -478,7 +483,7 @@ export default function App() {
     const result = live
       ? await api<{
           tags: Tag[];
-          tracking: Record<string, string | null>;
+          tracking: Record<string, string[] | string | null>;
           pending: boolean;
         }>(`/tags/${encodeURIComponent(oldName)}`, {
           method: replacement ? "PATCH" : "DELETE",
@@ -491,7 +496,15 @@ export default function App() {
           tracking: Object.fromEntries(
             Object.entries(tagTracking).map(([key, value]) => [
               key,
-              value === oldName ? replacement?.name || null : value,
+              Array.isArray(value)
+                ? value
+                    .map((name) =>
+                      name === oldName ? replacement?.name : name,
+                    )
+                    .filter((name): name is string => !!name)
+                : value === oldName
+                  ? replacement?.name || null
+                  : value,
             ]),
           ),
           pending: false,
@@ -528,15 +541,18 @@ export default function App() {
         : "Tag saved.",
     );
   }
-  async function trackTag(tagName: string | null) {
+  async function trackTag(tagName: string) {
+    const tagNames = trackedTags.includes(tagName)
+      ? trackedTags.filter((name) => name !== tagName)
+      : [...trackedTags, tagName];
     if (live && !canWrite)
       throw new Error("Connect and sync before changing tracked tags.");
     const tracking = live
-      ? await api<Record<string, string | null>>("/tag-tracking", {
+      ? await api<Record<string, string[] | string | null>>("/tag-tracking", {
           method: "PUT",
-          body: JSON.stringify({ viewKey: tagViewKey, tagName }),
+          body: JSON.stringify({ viewKey: tagViewKey, tagNames }),
         })
-      : { ...tagTracking, [tagViewKey]: tagName };
+      : { ...tagTracking, [tagViewKey]: tagNames };
     setTagTracking(tracking);
     localStorage.setItem(
       `hypercal.tagTracking.${tagAccount}`,
@@ -1724,7 +1740,7 @@ export default function App() {
           live={live}
           canWrite={canWrite}
           onChange={saveTags}
-          trackedTag={trackedTag}
+          trackedTags={trackedTags}
           onTrack={trackTag}
           onEdit={(name, tag) => changeTag(name, tag)}
           onDelete={(name) => changeTag(name, null)}
@@ -1812,7 +1828,7 @@ export default function App() {
             canRead={verified && online}
             accountKey={tagAccount}
             refresh={refresh}
-            trackedTag={trackedTag}
+            trackedTags={trackedTags}
             viewKey={tagViewKey}
           />
           {search && (

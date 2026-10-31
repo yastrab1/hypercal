@@ -8,7 +8,7 @@ export function TagsSection({
   live,
   canWrite,
   onChange,
-  trackedTag,
+  trackedTags,
   onTrack,
   onEdit,
   onDelete,
@@ -17,8 +17,8 @@ export function TagsSection({
   live: boolean;
   canWrite: boolean;
   onChange: (tags: Tag[]) => Promise<void>;
-  trackedTag: string | null;
-  onTrack: (name: string | null) => Promise<void>;
+  trackedTags: string[];
+  onTrack: (name: string) => Promise<void>;
   onEdit: (oldName: string, tag: Tag) => Promise<void>;
   onDelete: (name: string) => Promise<void>;
 }) {
@@ -136,7 +136,9 @@ export function TagsSection({
       </div>
       <div id="sidebar-tags" hidden={collapsed}>
         {!tags.length && !adding && (
-          <p className="sidebar-hint">Tag events, then track the next one.</p>
+          <p className="sidebar-hint">
+            Select tags to show their next event in this view’s top bar.
+          </p>
         )}
         {tags.map((tag) => (
           <div className="tag-row" key={tag.name}>
@@ -160,13 +162,13 @@ export function TagsSection({
               type="button"
               className="tag-track"
               aria-label={`Track ${tag.name}`}
-              aria-pressed={trackedTag === tag.name}
+              aria-pressed={trackedTags.includes(tag.name)}
               disabled={busy || (live && !canWrite)}
               onClick={async () => {
                 setBusy(true);
                 setError("");
                 try {
-                  await onTrack(trackedTag === tag.name ? null : tag.name);
+                  await onTrack(tag.name);
                 } catch (e) {
                   setError((e as Error).message);
                 } finally {
@@ -175,7 +177,9 @@ export function TagsSection({
               }}
             >
               <span>{tag.name}</span>
-              {trackedTag === tag.name && <Eye size={17} aria-hidden="true" />}
+              {trackedTags.includes(tag.name) && (
+                <Eye size={17} aria-hidden="true" />
+              )}
             </button>
             <button
               className="icon-button tag-edit"
@@ -342,7 +346,7 @@ export function TagCountdowns({
   canRead,
   accountKey,
   refresh,
-  trackedTag,
+  trackedTags,
   viewKey,
 }: {
   tags: Tag[];
@@ -351,7 +355,7 @@ export function TagCountdowns({
   canRead: boolean;
   accountKey: string;
   refresh: number;
-  trackedTag: string | null;
+  trackedTags: string[];
   viewKey: string;
 }) {
   const [next, setNext] = useState<
@@ -371,7 +375,7 @@ export function TagCountdowns({
     } catch {}
   }, [accountKey, viewKey]);
   useEffect(() => {
-    if (!live || !canRead || !trackedTag) return;
+    if (!live || !canRead || !trackedTags.length) return;
     let cancelled = false;
     setStatus("Updating tag countdowns");
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -412,7 +416,7 @@ export function TagCountdowns({
     accountKey,
     JSON.stringify(tags),
     refresh,
-    trackedTag,
+    JSON.stringify(trackedTags),
     viewKey,
   ]);
 
@@ -423,10 +427,17 @@ export function TagCountdowns({
     return () => clearInterval(timer);
   }, []);
   const now = new Date();
-  const tracked = tags.filter((t) => t.name === trackedTag);
+  const tracked = trackedTags.flatMap((name) =>
+    tags.filter((t) => t.name === name),
+  );
   if (!tracked.length) return null;
   return (
-    <div className="header-tag-countdowns" aria-label="Tracked tag countdowns">
+    <div
+      className="header-tag-countdowns"
+      role="region"
+      tabIndex={0}
+      aria-label="Tracked tag countdowns, scroll for more"
+    >
       {tracked.map((tag) => {
         const event = live
           ? next[tag.name]
