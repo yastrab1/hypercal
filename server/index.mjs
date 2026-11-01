@@ -30,6 +30,8 @@ import {
   removeItem,
   saveViewDefinition,
   setLayoutDefault,
+  includeNewCalendars,
+  discoverCalendars,
 } from "./store.mjs";
 import { fetchCalendar, parseFeed } from "./feeds.mjs";
 import { copiedEventBody } from "./copy-event.mjs";
@@ -307,6 +309,8 @@ app.post("/api/calendars", auth, async (req, res) => {
         timeZone: process.env.CALENDAR_TIMEZONE || "Europe/Prague",
       },
     });
+    includeNewCalendars(req.session.accountId, [c.id]);
+    await invalidateGoogleCache(req.session.accountId);
     res.status(201).json({
       id: c.id,
       name: c.summary,
@@ -603,6 +607,13 @@ app.get("/api/calendars", auth, async (req, res) => {
   const items = await allPages(
     req.session.accountId,
     "users/me/calendarList?maxResults=250",
+  );
+  discoverCalendars(
+    req.session.accountId,
+    items
+      .filter((c) => c.accessRole !== "freeBusyReader")
+      .map((c) => c.id)
+      .concat(getAccount(req.session.accountId).subscriptions.map((c) => c.id)),
   );
   res.json(
     items
@@ -961,6 +972,7 @@ app.post("/api/subscriptions", auth, async (req, res) => {
     cached: text,
     refreshedAt: Date.now(),
   });
+  includeNewCalendars(req.session.accountId, [s.id]);
   res
     .status(201)
     .json({ id: s.id, name, color, readOnly: true, source: "ical" });
@@ -998,6 +1010,7 @@ app.post("/api/imports", auth, (req, res) => {
     cached: text,
     refreshedAt: Date.now(),
   });
+  includeNewCalendars(req.session.accountId, [s.id]);
   res
     .status(201)
     .json({ id: s.id, name, color, readOnly: true, source: "ical" });
@@ -1005,6 +1018,13 @@ app.post("/api/imports", auth, (req, res) => {
 app.delete("/api/subscriptions/:id", auth, (req, res) => {
   removeItem(req.session.accountId, "subscriptions", req.params.id);
   res.json({ ok: true });
+});
+app.get("/downloads/android-update.json", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  const file = resolve("dist/downloads/android-update.json");
+  if (!existsSync(file))
+    return res.status(404).json({ error: "Android build unavailable" });
+  res.sendFile(file);
 });
 app.get(["/download", "/downloads/hypercal-debug.apk"], (req, res) => {
   res.download(

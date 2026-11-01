@@ -12,9 +12,11 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    private AppUpdater updater;
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        updater = new AppUpdater(this);
         // Own insets here. Capacitor's compatibility handler pads the whole
         // decor view on older WebViews, leaving grey bands even in immersive mode.
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
@@ -56,6 +58,24 @@ public class MainActivity extends BridgeActivity {
             useFullScreen();
             ViewCompat.requestApplyInsets(getWindow().getDecorView());
         }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (updater != null) updater.resume();
+    }
+
+    @Override
+    public void onPause() {
+        if (updater != null) updater.pause();
+        super.onPause();
+    }
+
+    @Override
+    public void onDestroy() {
+        if (updater != null) updater.close();
+        super.onDestroy();
     }
 
     private void useFullScreen() {

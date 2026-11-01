@@ -213,3 +213,9 @@ Single-key shortcuts can be disabled in settings. Within form fields and focused
 [MIT](LICENSE). Google Calendar is a Google product; HyperCal is an independent interface and is not affiliated with or endorsed by Google.
 
 Track multiple tags per view by toggling their eye icons in the sidebar. Colored countdowns fill the toolbar from right to left; on phones they occupy the inset beside the camera, with horizontal scrolling for overflow. Existing single-tag selections are preserved.
+
+Android checks for updates when opened or resumed (at most once per 15 minutes while running). A newer APK is downloaded in the background from `/download`, verified against `/downloads/android-update.json`, checked for the same package/signing certificate, then offered for installation. Android requires installation approval and, once, permission to install from HyperCal. “Later” postpones that version for 24 hours. Offline/failed checks leave the app usable. Install v0.10.3 manually once to enable this; older APKs cannot update themselves. Update origin is pinned in native `AppUpdater.java`.
+
+Packaging generates `android-update.json` with version code, byte size and SHA-256. Deploy it together with the APK in `dist/downloads`; CI includes it in GitHub release assets. A mismatched or incomplete deployment is rejected by the updater.
+
+Newly created, imported, subscribed or newly discovered Google calendars are included in all your saved views by default. You can subsequently exclude them in view settings. Existing exclusions are preserved when the initial calendar inventory is established. Shared views retain their explicit sharing permissions.

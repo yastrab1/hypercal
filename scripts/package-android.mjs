@@ -1,3 +1,4 @@
+import { androidUpdateMetadata } from "../server/android-update.mjs";
 import { mkdirSync, copyFileSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 const from = "android/app/build/outputs/apk/debug/app-debug.apk";
@@ -11,3 +12,13 @@ writeFileSync(
   hash + "  hypercal-debug.apk\n",
 );
 console.log("Packaged APK at /downloads/hypercal-debug.apk; SHA-256 " + hash);
+
+writeFileSync(
+  "dist/downloads/android-update.json",
+  JSON.stringify(
+    androidUpdateMetadata(
+      readFileSync(from),
+      readFileSync("android/app/build.gradle", "utf8"),
+    ),
+  ),
+);

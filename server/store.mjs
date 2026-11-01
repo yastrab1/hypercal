@@ -84,3 +84,31 @@ export function setLayoutDefault(id, layout, viewId) {
 export function listAccountIds() {
   return Object.keys(db.accounts);
 }
+
+// Only newly discovered calendars are included. An initial inventory must not
+// undo the user's existing deliberate exclusions.
+export function includeNewCalendars(id, ids) {
+  const account = getAccount(id);
+  const known = [...new Set([...(account.knownCalendarIds || []), ...ids])];
+  const views = account.views.map((view) => ({
+    ...view,
+    calendarIds: [...new Set([...view.calendarIds, ...ids])],
+  }));
+  return upsertAccount(id, {
+    views,
+    ...(account.knownCalendarIds ? { knownCalendarIds: known } : {}),
+  });
+}
+export function discoverCalendars(id, ids) {
+  const account = getAccount(id);
+  const known = account.knownCalendarIds;
+  if (known) {
+    const added = ids.filter((calendarId) => !known.includes(calendarId));
+    if (added.length) includeNewCalendars(id, added);
+  }
+  const current = [...new Set(ids)];
+  if (
+    JSON.stringify(current) !== JSON.stringify(getAccount(id).knownCalendarIds)
+  )
+    upsertAccount(id, { knownCalendarIds: current });
+}

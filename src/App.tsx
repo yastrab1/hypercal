@@ -869,11 +869,13 @@ export default function App() {
     }
     if (!verified || !online) return;
     Promise.all([
-      api<Calendar[]>("/calendars"),
-      api<SavedView[]>("/views"),
+      api<Calendar[]>("/calendars").then(
+        async (calendars) =>
+          [calendars, await api<SavedView[]>("/views")] as const,
+      ),
       api<SharedView[]>("/shared-views"),
     ])
-      .then(([c, v, shared]) => {
+      .then(([[c, v], shared]) => {
         setSharedViews(shared);
         if (cancelled) return;
         setCalendars((old) => reuseRecords(old, c));
@@ -2146,13 +2148,23 @@ export default function App() {
               );
               setCalendars((cs) => [...cs, c]);
               setVisible((ids) => [...ids, c.id]);
-              setActiveView(null);
+              setViews((vs) =>
+                vs.map((v) => ({
+                  ...v,
+                  calendarIds: [...new Set([...v.calendarIds, c.id])],
+                })),
+              );
               close();
             }}
             onAdded={(c) => {
               setCalendars((cs) => [...cs, c]);
               setVisible((ids) => [...ids, c.id]);
-              setActiveView(null);
+              setViews((vs) =>
+                vs.map((v) => ({
+                  ...v,
+                  calendarIds: [...new Set([...v.calendarIds, c.id])],
+                })),
+              );
               close();
               flash(
                 c.source === "google"

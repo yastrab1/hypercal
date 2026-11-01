@@ -82,6 +82,7 @@ jobs:
           path: |
             dist/downloads/hypercal-debug.apk
             dist/downloads/hypercal-debug.apk.sha256
+            dist/downloads/android-update.json
           retention-days: 30
       - uses: actions/upload-artifact@v7.0.2
         with:
@@ -115,4 +116,4 @@ jobs:
               gh release create "$tag" --target "$GITHUB_SHA" --title 'Latest main build' --prerelease --notes 'Automatically rebuilt from main. Debug APK; backend configuration is described in the README.'
             fi
           fi
-          gh release upload "$tag" release/hypercal-debug.apk release/hypercal-debug.apk.sha256 --clobber
+          gh release upload "$tag" release/hypercal-debug.apk release/hypercal-debug.apk.sha256 release/android-update.json --clobber
