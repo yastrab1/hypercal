@@ -5167,3 +5167,80 @@ button.tag-track {
     line-height: 18px;
   }
 }
+
+.settings-tabs {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 20px;
+}
+.settings-tabs button {
+  padding: 12px 2px;
+  min-height: 44px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+.settings-tabs [aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.tag-settings-list {
+  margin-bottom: 16px;
+}
+.tag-settings-choice {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: transparent;
+  text-align: left;
+  padding: 12px 0;
+  min-height: 52px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.tag-settings-choice > i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex: none;
+}
+.tag-settings-choice > span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tag-settings-choice small {
+  display: block;
+  color: var(--muted);
+  margin-top: 3px;
+  font-size: 12px;
+}
+.tag-settings-choice > span:last-child {
+  color: var(--accent);
+  font-size: 12px;
+}
+.tag-rule-form,
+.tag-settings-new {
+  padding-block: 16px;
+}
+.tag-rule-form .view-calendar-picker {
+  max-height: 240px;
+  overflow-y: auto;
+}
+.tag-rule-form .small {
+  line-height: 1.5;
+}
+.tag-settings-delete {
+  padding-block: 10px;
+}
+.tag-settings-delete button {
+  margin-right: 8px;
+}
+@media (max-width: 760px) {
+  .tag-rule-form .calendar-toggle {
+    min-height: 44px;
+  }
+}

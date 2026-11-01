@@ -8,6 +8,12 @@ export interface Calendar {
   primary?: boolean;
 }
 export interface Tag {
+  rule?: {
+    mode: "event" | "automatic";
+    calendarIds: string[];
+    include: string;
+    exclude: string;
+  };
   name: string;
   color: string;
 }

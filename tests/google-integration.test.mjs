@@ -529,6 +529,61 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     assert.equal(deleted.status, 200);
     await deleted.json();
     assert.equal(upstream.length, 0);
+    const rule = {
+      mode: "automatic",
+      calendarIds: ["primary"],
+      include: "exam|test",
+      exclude: "practice",
+    };
+    const ruleTags = tagDefinitions.map((tag) => ({ ...tag, rule }));
+    const savedRules = await fetch(`${origin}/api/tags`, {
+      method: "PUT",
+      headers: alice,
+      body: JSON.stringify(ruleTags),
+    });
+    assert.equal(savedRules.status, 200);
+    const autoCreated = await fetch(`${origin}/api/events`, {
+      method: "POST",
+      headers: alice,
+      body: JSON.stringify({ ...draft, title: "Final exam", tags: [] }),
+    });
+    assert.equal(autoCreated.status, 201);
+    assert.deepEqual(
+      JSON.parse(
+        (await autoCreated.json()).extendedProperties.shared.hypercalTags,
+      ),
+      ["Exam", "Holiday"],
+    );
+    upstream.length = 0;
+    assert.deepEqual(await savedRules.json(), ruleTags);
+    assert.deepEqual(
+      await (await fetch(`${origin}/api/tags`, { headers: bob })).json(),
+      [],
+    );
+    const invalidRule = await fetch(`${origin}/api/tags`, {
+      method: "PUT",
+      headers: alice,
+      body: JSON.stringify([
+        { ...ruleTags[0], rule: { ...rule, include: "[" } },
+      ]),
+    });
+    assert.equal(invalidRule.status, 400);
+    assert.deepEqual(
+      await (await fetch(`${origin}/api/tags`, { headers: alice })).json(),
+      ruleTags,
+    );
+    for (let i = 0; i < 100; i++) {
+      const state = await (
+        await fetch(`${origin}/api/tag-rule-sync`, { headers: alice })
+      ).json();
+      if (!state.scanning) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    await fetch(`${origin}/api/tags`, {
+      method: "PUT",
+      headers: alice,
+      body: JSON.stringify(tagDefinitions),
+    });
   } finally {
     OAuth2Client.prototype.request = originalRequest;
     await new Promise((resolve) => server.close(resolve));

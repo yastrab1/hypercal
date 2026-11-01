@@ -42,7 +42,16 @@ test("tag rename/delete update provider metadata, cached assignments and per-vie
           views: [],
           subscriptions: [],
           tags: [
-            { name: "Exam", color: "#4b99d2" },
+            {
+              name: "Exam",
+              color: "#4b99d2",
+              rule: {
+                mode: "event",
+                calendarIds: [],
+                include: "exam",
+                exclude: "",
+              },
+            },
             { name: "Other", color: "#55b080" },
           ],
           tagTracking: {
@@ -128,6 +137,10 @@ test("tag rename/delete update provider metadata, cached assignments and per-vie
       color: "#a479b1",
     });
     assert.equal(renamed.status, 200);
+    assert.equal(
+      renamed.data.tags.find((tag) => tag.name === "Final exam").rule.include,
+      "exam",
+    );
     assert.equal(renamed.data.tracking["layout:month"], "Final exam");
     assert.equal(renamed.data.tracking["layout:week"], "Other");
     assert.deepEqual(renamed.data.tracking["layout:day"], [

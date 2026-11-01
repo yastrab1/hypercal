@@ -1,3 +1,4 @@
+import { TagSettings } from "./TagSettings";
 import { PluginsPanel } from "./PluginsPanel";
 import { continuousFor } from "./scroll-options.mjs";
 import { ScrollOptions } from "./ScrollOptions";
@@ -210,6 +211,7 @@ export default function App() {
       : null,
   );
   const [tags, setTags] = useState<Tag[]>([]);
+  const [settingsTab, setSettingsTab] = useState<"general" | "tags">("general");
   const [tagTracking, setTagTracking] = useState<
     Record<string, string[] | string | null>
   >({});
@@ -469,6 +471,8 @@ export default function App() {
     if (result.length > 40) throw new Error("Create up to 40 tags.");
     localStorage.setItem(`hypercal.tags.${tagAccount}`, JSON.stringify(result));
     setTags(result);
+    if (live && accountId) calendarCache.invalidateEvents(accountId);
+    setRefresh((n) => n + 1);
   }
 
   async function changeTag(oldName: string, replacement: Tag | null) {
@@ -491,7 +495,9 @@ export default function App() {
         })
       : {
           tags: replacement
-            ? tags.map((t) => (t.name === oldName ? replacement : t))
+            ? tags.map((t) =>
+                t.name === oldName ? { ...t, ...replacement } : t,
+              )
             : tags.filter((t) => t.name !== oldName),
           tracking: Object.fromEntries(
             Object.entries(tagTracking).map(([key, value]) => [
@@ -2192,229 +2198,288 @@ export default function App() {
       )}
       {panel === "settings" && (
         <Panel title="Calendar settings" onClose={close} variant="settings">
-          <div className="settings-section">
-            <span className="integration-icon">
-              <CalendarDays size={26} />
-            </span>
-            <h3>Google Calendar, with perspective.</h3>
-            <p>
-              Keep Google as your calendar. Use HyperCal to see it your way.
-              Event changes are saved directly to Google; changes from Google
-              appear on refresh.
-            </p>
-            {live ? (
-              <>
-                <button className="secondary-button" onClick={connectGoogle}>
-                  Reconnect Google / allow calendar creation
-                </button>
-                <div className="connected-account">
-                  <CheckCircle2 size={18} />
-                  <span>{session?.user?.email}</span>
-                </div>
-                <button
-                  className="secondary-button"
-                  onClick={async () => {
-                    try {
-                      await api("/logout", { method: "POST" });
-                      calendarCache.forget();
-                      location.reload();
-                    } catch (e) {
-                      setError((e as Error).message);
-                    }
-                  }}
-                >
-                  <LogOut size={15} /> Sign out of HyperCal
-                </button>
-              </>
-            ) : session?.configured ? (
-              <button className="primary-button" onClick={connectGoogle}>
-                <Globe size={17} /> Continue with Google{" "}
-                <ArrowUpRight size={15} />
-              </button>
-            ) : (
-              <>
-                <div className="setup-note">
-                  <strong>One setup step remaining</strong>
-                  <p>
-                    Add a Google Cloud <b>Web application</b> OAuth client to
-                    the backend configuration. Enable the Calendar API and add
-                    your account as a test user.
-                  </p>
-                  <label>Authorized redirect URI</label>
-                  <code>
-                    {session?.appUrl || location.origin}/auth/google/callback
-                  </code>
-                  <small>
-                    Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in R2D2’s
-                    private .env file, then restart HyperCal.
-                  </small>
-                </div>
-                <button className="secondary-button" onClick={close}>
-                  Keep exploring the demo
-                </button>
-              </>
-            )}
-          </div>
-          <div className="settings-divider" />
-          <label className="field">
-            Appearance
-            <select
-              value={theme}
-              onChange={(e) => setTheme(e.target.value as Theme)}
-            >
-              <option value="system">Use device theme</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-            <small>
-              Saved on this device. Both themes use your Google calendar colors.
-            </small>
-          </label>
-          <div className="settings-divider" />
-          <NotificationDefaults
-            value={notificationDefault}
-            disabled={live && !canWrite}
-            onSave={async (value) => {
-              if (live) {
-                await api("/preferences", {
-                  method: "PATCH",
-                  body: JSON.stringify({ notificationDefault: value }),
-                });
-                setSession((s) =>
-                  s ? { ...s, notificationDefault: value } : s,
-                );
+          <div
+            className="settings-tabs"
+            role="tablist"
+            aria-label="Calendar settings sections"
+            onKeyDown={(e) => {
+              if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) {
+                e.preventDefault();
+                const next =
+                  e.key === "Home"
+                    ? "general"
+                    : e.key === "End"
+                      ? "tags"
+                      : settingsTab === "general"
+                        ? "tags"
+                        : "general";
+                setSettingsTab(next);
+                document.getElementById(`settings-tab-${next}`)?.focus();
               }
-              localStorage.setItem(
-                `hypercal.notificationDefault.${session?.user?.id || "demo"}`,
-                JSON.stringify(value),
-              );
-              setNotificationDefault(value);
-              flash("Default notification saved.");
             }}
-          />
-          <div className="settings-divider" />
-          <section className="calendar-plugin-settings">
-            <h3>Plugins</h3>
-            <p>
-              Configure EduPage imports, destination calendars, filters and
-              automatic sync.
-            </p>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => setPanel("plugins")}
+          >
+            {(["general", "tags"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                id={`settings-tab-${tab}`}
+                aria-controls={`settings-page-${tab}`}
+                aria-selected={settingsTab === tab}
+                tabIndex={settingsTab === tab ? 0 : -1}
+                onClick={() => setSettingsTab(tab)}
+              >
+                {tab === "general" ? "General" : "Tags"}
+              </button>
+            ))}
+          </div>
+          {settingsTab === "tags" && (
+            <div
+              role="tabpanel"
+              id="settings-page-tags"
+              aria-labelledby="settings-tab-tags"
             >
-              <Puzzle size={16} />
-              Manage plugins
-            </button>
-          </section>
-          <div className="settings-divider" />
-          {canEditViews && (
-            <section className="layout-default-settings">
-              <h3>View settings</h3>
+              <TagSettings
+                tags={tags}
+                calendars={calendars}
+                live={live}
+                disabled={live && !canWrite}
+                onSave={saveTags}
+                onDelete={(name) => changeTag(name, null)}
+              />
+            </div>
+          )}
+          <div
+            hidden={settingsTab !== "general"}
+            role="tabpanel"
+            id="settings-page-general"
+            aria-labelledby="settings-tab-general"
+          >
+            <div className="settings-section">
+              <span className="integration-icon">
+                <CalendarDays size={26} />
+              </span>
+              <h3>Google Calendar, with perspective.</h3>
               <p>
-                Opening a layout uses its default filters. Clicking a date
-                always opens the default Day view.
+                Keep Google as your calendar. Use HyperCal to see it your way.
+                Event changes are saved directly to Google; changes from Google
+                appear on refresh.
               </p>
-              {layouts.map((l) => (
-                <div className="settings-view-choice" key={l}>
-                  <label className="field">
-                    Default {labels[l].toLowerCase()} view
-                    <select
-                      aria-label={`Default ${l} view`}
-                      disabled={defaultSaving}
-                      value={getDefaultView(views, l)?.id || ""}
-                      onChange={(e) =>
-                        saveLayoutDefault(l, e.target.value || null)
-                      }
-                    >
-                      <option value="">All calendars</option>
-                      {views
-                        .filter((v) => v.layout === l)
-                        .map((v) => (
-                          <option key={v.id} value={v.id}>
-                            {v.name}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    aria-label={`Edit default ${l} view`}
-                    onClick={() => customizeLayout(l)}
-                  >
-                    <Pencil size={15} />
-                    Edit
+              {live ? (
+                <>
+                  <button className="secondary-button" onClick={connectGoogle}>
+                    Reconnect Google / allow calendar creation
                   </button>
-                </div>
-              ))}
-              {views.some((v) => !v.isDefault) && (
-                <div className="settings-saved-views">
-                  <h4>Other saved views</h4>
-                  {views
-                    .filter((v) => !v.isDefault)
-                    .map((v) => (
-                      <button
-                        type="button"
-                        className="settings-view-link"
-                        key={v.id}
-                        onClick={() => {
-                          setEditingView(v);
-                          setPanel("view");
-                        }}
-                      >
-                        <span>
-                          {v.name}
-                          <small>{labels[v.layout]}</small>
-                        </span>
-                        <Pencil size={15} />
-                      </button>
-                    ))}
-                </div>
+                  <div className="connected-account">
+                    <CheckCircle2 size={18} />
+                    <span>{session?.user?.email}</span>
+                  </div>
+                  <button
+                    className="secondary-button"
+                    onClick={async () => {
+                      try {
+                        await api("/logout", { method: "POST" });
+                        calendarCache.forget();
+                        location.reload();
+                      } catch (e) {
+                        setError((e as Error).message);
+                      }
+                    }}
+                  >
+                    <LogOut size={15} /> Sign out of HyperCal
+                  </button>
+                </>
+              ) : session?.configured ? (
+                <button className="primary-button" onClick={connectGoogle}>
+                  <Globe size={17} /> Continue with Google{" "}
+                  <ArrowUpRight size={15} />
+                </button>
+              ) : (
+                <>
+                  <div className="setup-note">
+                    <strong>One setup step remaining</strong>
+                    <p>
+                      Add a Google Cloud <b>Web application</b> OAuth client to
+                      the backend configuration. Enable the Calendar API and add
+                      your account as a test user.
+                    </p>
+                    <label>Authorized redirect URI</label>
+                    <code>
+                      {session?.appUrl || location.origin}/auth/google/callback
+                    </code>
+                    <small>
+                      Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in R2D2’s
+                      private .env file, then restart HyperCal.
+                    </small>
+                  </div>
+                  <button className="secondary-button" onClick={close}>
+                    Keep exploring the demo
+                  </button>
+                </>
               )}
+            </div>
+            <div className="settings-divider" />
+            <label className="field">
+              Appearance
+              <select
+                value={theme}
+                onChange={(e) => setTheme(e.target.value as Theme)}
+              >
+                <option value="system">Use device theme</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+              <small>
+                Saved on this device. Both themes use your Google calendar
+                colors.
+              </small>
+            </label>
+            <div className="settings-divider" />
+            <NotificationDefaults
+              value={notificationDefault}
+              disabled={live && !canWrite}
+              onSave={async (value) => {
+                if (live) {
+                  await api("/preferences", {
+                    method: "PATCH",
+                    body: JSON.stringify({ notificationDefault: value }),
+                  });
+                  setSession((s) =>
+                    s ? { ...s, notificationDefault: value } : s,
+                  );
+                }
+                localStorage.setItem(
+                  `hypercal.notificationDefault.${session?.user?.id || "demo"}`,
+                  JSON.stringify(value),
+                );
+                setNotificationDefault(value);
+                flash("Default notification saved.");
+              }}
+            />
+            <div className="settings-divider" />
+            <section className="calendar-plugin-settings">
+              <h3>Plugins</h3>
+              <p>
+                Configure EduPage imports, destination calendars, filters and
+                automatic sync.
+              </p>
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => {
-                  setEditingView(null);
-                  setPanel("view");
-                }}
+                onClick={() => setPanel("plugins")}
               >
-                <Plus size={15} />
-                Create view
+                <Puzzle size={16} />
+                Manage plugins
               </button>
-              {defaultError && (
-                <p className="form-error" role="alert">
-                  {defaultError}
-                </p>
-              )}
-              <small className="muted">
-                Defaults save automatically to your account.
-              </small>
-              <div className="settings-divider" />
             </section>
-          )}
-          <label className="settings-toggle">
-            <span>
-              <strong>Single-key shortcuts</strong>
-              <small>
-                Navigate with D, W, M, Y and create with C. Turn off for screen
-                readers that reserve these keys.
-              </small>
-            </span>
-            <input
-              type="checkbox"
-              checked={shortcuts}
-              onChange={(e) => {
-                setShortcuts(e.target.checked);
-                localStorage.setItem(
-                  "hypercal.shortcuts",
-                  JSON.stringify(e.target.checked),
-                );
-              }}
-            />
-          </label>
+            <div className="settings-divider" />
+            {canEditViews && (
+              <section className="layout-default-settings">
+                <h3>View settings</h3>
+                <p>
+                  Opening a layout uses its default filters. Clicking a date
+                  always opens the default Day view.
+                </p>
+                {layouts.map((l) => (
+                  <div className="settings-view-choice" key={l}>
+                    <label className="field">
+                      Default {labels[l].toLowerCase()} view
+                      <select
+                        aria-label={`Default ${l} view`}
+                        disabled={defaultSaving}
+                        value={getDefaultView(views, l)?.id || ""}
+                        onChange={(e) =>
+                          saveLayoutDefault(l, e.target.value || null)
+                        }
+                      >
+                        <option value="">All calendars</option>
+                        {views
+                          .filter((v) => v.layout === l)
+                          .map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {v.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      aria-label={`Edit default ${l} view`}
+                      onClick={() => customizeLayout(l)}
+                    >
+                      <Pencil size={15} />
+                      Edit
+                    </button>
+                  </div>
+                ))}
+                {views.some((v) => !v.isDefault) && (
+                  <div className="settings-saved-views">
+                    <h4>Other saved views</h4>
+                    {views
+                      .filter((v) => !v.isDefault)
+                      .map((v) => (
+                        <button
+                          type="button"
+                          className="settings-view-link"
+                          key={v.id}
+                          onClick={() => {
+                            setEditingView(v);
+                            setPanel("view");
+                          }}
+                        >
+                          <span>
+                            {v.name}
+                            <small>{labels[v.layout]}</small>
+                          </span>
+                          <Pencil size={15} />
+                        </button>
+                      ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setEditingView(null);
+                    setPanel("view");
+                  }}
+                >
+                  <Plus size={15} />
+                  Create view
+                </button>
+                {defaultError && (
+                  <p className="form-error" role="alert">
+                    {defaultError}
+                  </p>
+                )}
+                <small className="muted">
+                  Defaults save automatically to your account.
+                </small>
+                <div className="settings-divider" />
+              </section>
+            )}
+            <label className="settings-toggle">
+              <span>
+                <strong>Single-key shortcuts</strong>
+                <small>
+                  Navigate with D, W, M, Y and create with C. Turn off for
+                  screen readers that reserve these keys.
+                </small>
+              </span>
+              <input
+                type="checkbox"
+                checked={shortcuts}
+                onChange={(e) => {
+                  setShortcuts(e.target.checked);
+                  localStorage.setItem(
+                    "hypercal.shortcuts",
+                    JSON.stringify(e.target.checked),
+                  );
+                }}
+              />
+            </label>
+          </div>
         </Panel>
       )}
       {panel === "shortcuts" && (

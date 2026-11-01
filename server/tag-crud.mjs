@@ -131,7 +131,7 @@ export function registerTagCrud(app, auth, cache, invalidate) {
         to === null
           ? account.tags.filter((t) => t.name !== from)
           : account.tags.map((t) =>
-              t.name === from ? { name: to, color } : t,
+              t.name === from ? { ...t, name: to, color } : t,
             ),
       tagTracking: Object.fromEntries(
         Object.entries(account.tagTracking || {}).map(([key, value]) => [

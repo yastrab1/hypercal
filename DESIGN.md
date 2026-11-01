@@ -19,3 +19,5 @@ Keyboard shortcuts and a command palette are primary controls. Explicit editor f
 View and plugin management are available through Calendar settings on web and Android. View editors retain the full filtering and per-device scrolling controls on phones, with visible touch targets. Shared-view management remains in the sidebar.
 
 Per-view tracked tags support multiple countdown pills, arranged from right to left in a single scrollable rail. Phones use the top inset to the right of the centered camera cutout; the date/navigation row retains its width.
+
+Calendar settings has General and Tags tabs, with keyboard arrow navigation. The Tags tab uses inline tag rows and forms for By event / Automatic application, calendar checkboxes, include regex and exclude regex. Use the existing neutral settings surfaces, 44px touch targets and 16px phone inputs. Automatic matches are controlled by rules rather than per-event checkboxes.

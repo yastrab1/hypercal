@@ -381,6 +381,7 @@ export function EventEditor({
                   <input
                     type="checkbox"
                     checked={eventTags.includes(tag.name)}
+                    disabled={"rule" in tag && tag.rule?.mode === "automatic"}
                     onChange={(e) =>
                       setEventTags(
                         e.target.checked
@@ -391,6 +392,9 @@ export function EventEditor({
                   />
                   <i style={{ background: tag.color }} />
                   {tag.name}
+                  {"rule" in tag && tag.rule?.mode === "automatic"
+                    ? " (automatic)"
+                    : ""}
                 </label>
               ))}
             </div>

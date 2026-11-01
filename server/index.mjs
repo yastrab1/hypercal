@@ -1,3 +1,5 @@
+import { tagRuleSchema, automaticEventTags } from "./tag-rules.mjs";
+import { createAutomaticTags } from "./automatic-tags.mjs";
 import {
   createPluginService,
   registerPluginHooks,
@@ -8,7 +10,7 @@ import { applyTagAliases } from "./tag-aliases.mjs";
 import { changeRecurring } from "./recurrence.mjs";
 import { registerTagCrud } from "./tag-crud.mjs";
 import { TagCache } from "./tag-cache.mjs";
-import { tagKey } from "./tags.mjs";
+import { tagKey, readEventTags } from "./tags.mjs";
 import { registerSharedViews } from "./shared-views.mjs";
 import { validNotification } from "../src/notifications.mjs";
 import "dotenv/config";
@@ -46,6 +48,7 @@ import {
 } from "./google.mjs";
 const tagCache = new TagCache(resolve(dataDir, "tagged-events"));
 const tagRefreshes = new Map();
+const automaticTags = createAutomaticTags(tagCache);
 const nativeAttempts = new Map();
 setInterval(() => {
   for (const [id, a] of nativeAttempts)
@@ -332,6 +335,7 @@ const tagsSchema = z
     z.object({
       name: z.string().trim().min(1).max(60),
       color: z.string().regex(/^#[\da-f]{6}$/i),
+      rule: tagRuleSchema.optional(),
     }),
   )
   .max(40)
@@ -339,8 +343,12 @@ const tagsSchema = z
     (tags) => new Set(tags.map((t) => t.name)).size === tags.length,
     "Tag names must be unique.",
   );
-app.get("/api/tags", auth, (req, res) =>
-  res.json(getAccount(req.session.accountId).tags || []),
+app.get("/api/tags", auth, (req, res) => {
+  void automaticTags.scan(req.session.accountId);
+  res.json(getAccount(req.session.accountId).tags || []);
+});
+app.get("/api/tag-rule-sync", auth, (req, res) =>
+  res.json(automaticTags.status(req.session.accountId)),
 );
 app.get("/api/tag-tracking", auth, (req, res) =>
   res.json(getAccount(req.session.accountId).tagTracking || {}),
@@ -394,9 +402,14 @@ app.put("/api/tags", auth, (req, res) => {
   const aliases = { ...account.tagAliases };
   for (const tag of added) delete aliases[tag.name];
   upsertAccount(req.session.accountId, { tags, tagAliases: aliases });
+  automaticTags.changed(req.session.accountId);
+  for (const [key, state] of tagRefreshes)
+    if (key.startsWith(JSON.stringify([req.session.accountId]).slice(0, -1)))
+      state.checkedAt = 0;
   res.json(tags);
 });
 const tagCrud = registerTagCrud(app, auth, tagCache, (id) => {
+  automaticTags.changed(id);
   for (const [key, state] of tagRefreshes)
     if (key.startsWith(JSON.stringify([id]).slice(0, -1))) state.checkedAt = 0;
 });
@@ -417,6 +430,7 @@ app.get("/api/tag-countdowns", auth, async (req, res) => {
     : trackedValue
       ? [trackedValue]
       : [];
+  void automaticTags.scan(id);
   const tags = (account.tags || []).filter((t) =>
     trackedNames.includes(t.name),
   );
@@ -487,10 +501,13 @@ app.get("/api/tag-countdowns", auth, async (req, res) => {
               parseFeed(text, sub, from.toISOString(), feedTo.toISOString())
                 .map((e) => ({
                   ...e,
-                  tags: applyTagAliases(
-                    e.tags || [],
-                    getAccount(id).tagAliases,
-                  ),
+                  tags: automaticEventTags(getAccount(id).tags, {
+                    ...e,
+                    tags: applyTagAliases(
+                      e.tags || [],
+                      getAccount(id).tagAliases,
+                    ),
+                  }),
                 }))
                 .filter((e) =>
                   trackedNames.some((name) => e.tags?.includes(name)),
@@ -596,7 +613,7 @@ app.get("/api/tag-countdowns", auth, async (req, res) => {
       }),
     ),
     warnings: state.warnings,
-    refreshing: state.running,
+    refreshing: state.running || automaticTags.status(id).scanning,
   });
 });
 app.post("/api/cache/refresh", auth, async (req, res) => {
@@ -692,7 +709,16 @@ app.get("/api/events", auth, async (req, res) => {
               to,
               parseFeed(text, sub, from, to).map((e) => ({
                 ...e,
-                tags: applyTagAliases(e.tags || [], getAccount(id).tagAliases),
+                tags: automaticEventTags(getAccount(id).tags, {
+                  ...e,
+                  tags: automaticEventTags(getAccount(id).tags, {
+                    ...e,
+                    tags: applyTagAliases(
+                      e.tags || [],
+                      getAccount(id).tagAliases,
+                    ),
+                  }),
+                }),
               })),
             )
           : [];
@@ -703,6 +729,7 @@ app.get("/api/events", auth, async (req, res) => {
         id,
         `calendars/${encodeURIComponent(calendarId)}/events?singleEvents=true&orderBy=startTime&maxResults=2500&timeMin=${encodeURIComponent(from)}&timeMax=${encodeURIComponent(to)}`,
       );
+      automaticTags.enqueue(id, c, items, false);
       return tagCache.range(
         id,
         calendarId,
@@ -782,6 +809,7 @@ const eventSchema = z
   });
 app.post("/api/events", auth, async (req, res) => {
   const e = eventSchema.parse(req.body);
+  e.tags = automaticEventTags(getAccount(req.session.accountId).tags, e);
   const result = await googleRequest(
     req.session.accountId,
     `calendars/${encodeURIComponent(e.calendarId)}/events`,
@@ -856,7 +884,18 @@ app.patch("/api/events/:id", auth, async (req, res) => {
     etag: draft.etag,
     scope: draft.scope,
     draft,
-    body: scopedEventBody,
+    body: (draft, target, occurrence) =>
+      scopedEventBody(
+        {
+          ...draft,
+          tags: automaticEventTags(getAccount(req.session.accountId).tags, {
+            ...draft,
+            tags: draft.tags || readEventTags(occurrence || target),
+          }),
+        },
+        target,
+        occurrence,
+      ),
     normalize: normalizeEvent,
     request: googleRequest,
     cache: tagCache,
@@ -1076,6 +1115,7 @@ export { app, server };
 server.on("close", () => {
   sharedStore.close();
   tagCrud.close();
+  automaticTags.close();
 });
 
 server.on("close", () => plugins.close());

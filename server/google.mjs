@@ -1,9 +1,10 @@
+import { automaticEventTags } from "./tag-rules.mjs";
 import { ReadCache, canonicalPath, createLimiter } from "./read-cache.mjs";
 import { resolve } from "node:path";
 import { dataDir } from "./store.mjs";
 import { createSingleFlight } from "./singleflight.mjs";
 import { applyTagAliases } from "./tag-aliases.mjs";
-import { readEventTags } from "./tags.mjs";
+import { readEventTags, googleTagFields } from "./tags.mjs";
 import { readEventColor } from "../src/event-colors.mjs";
 import { OAuth2Client } from "google-auth-library";
 import { readFileSync } from "node:fs";
@@ -52,6 +53,34 @@ export async function googleRequest(
   { method = "GET", body, etag } = {},
 ) {
   const client = await clientFor(id);
+  // Apply rules to all new Google events, including copies and plugin imports.
+  // Partial updates are reconciled by the normal event route/background worker.
+  const eventPath = /^calendars\/([^/]+)\/events$/.exec(path);
+  if (
+    method.toUpperCase() === "POST" &&
+    eventPath &&
+    body?.summary !== undefined &&
+    getAccount(id)?.tags?.some((tag) => tag.rule?.mode === "automatic")
+  ) {
+    const prior = readEventTags(body);
+    const tags = automaticEventTags(getAccount(id).tags, {
+      calendarId: decodeURIComponent(eventPath[1]),
+      title: body.summary,
+      description: body.description,
+      location: body.location,
+      tags: prior,
+    });
+    body = {
+      ...body,
+      extendedProperties: {
+        ...body.extendedProperties,
+        shared: {
+          ...body.extendedProperties?.shared,
+          ...googleTagFields(tags, prior).shared,
+        },
+      },
+    };
+  }
   const mutation = method.toUpperCase() !== "GET";
   if (mutation) await invalidateGoogleCache(id);
   try {
@@ -145,7 +174,16 @@ export function normalizeEvent(
   return {
     id: e.id,
     calendarId: calendar.id,
-    tags: applyTagAliases(readEventTags(e), getAccount(accountId)?.tagAliases),
+    tags: automaticEventTags(getAccount(accountId)?.tags, {
+      calendarId: calendar.id,
+      title: e.summary,
+      description: e.description,
+      location: e.location,
+      tags: applyTagAliases(
+        readEventTags(e),
+        getAccount(accountId)?.tagAliases,
+      ),
+    }),
     title: e.summary || "Untitled event",
     description: e.description || "",
     location: e.location || "",
