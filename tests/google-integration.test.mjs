@@ -366,6 +366,28 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       "External Google edit after caching",
     );
     assert.equal(eventReads, cachedReads + 1);
+    const originalDates = { start: upstream[0].start, end: upstream[0].end };
+    upstream[0].start = { date: "2026-10-28" };
+    upstream[0].end = { date: "2026-10-28" };
+    await fetch(`${origin}/api/cache/refresh`, {
+      method: "POST",
+      headers: alice,
+    });
+    const sameDate = await (
+      await fetch(`${origin}/api/events?${q}`, { headers: alice })
+    ).json();
+    assert.equal(sameDate.events[0].allDay, true);
+    assert.equal(sameDate.events[0].end, "2026-10-29");
+    assert.equal(
+      upstream[0].end.date,
+      "2026-10-28",
+      "Repair changes the adapter result, not the Google event",
+    );
+    Object.assign(upstream[0], originalDates);
+    await fetch(`${origin}/api/cache/refresh`, {
+      method: "POST",
+      headers: alice,
+    });
     upstream[0].summary = "Changed from Google Calendar";
     upstream[0].recurringEventId = "series1";
     upstream[0].attendees = [{ email: "friend@example.test" }];

@@ -1,3 +1,4 @@
+import { normalizeAllDayRange } from "../src/event-range.mjs";
 import { automaticEventTags } from "./tag-rules.mjs";
 import { ReadCache, canonicalPath, createLimiter } from "./read-cache.mjs";
 import { resolve } from "node:path";
@@ -187,9 +188,11 @@ export function normalizeEvent(
     title: e.summary || "Untitled event",
     description: e.description || "",
     location: e.location || "",
-    start: e.start?.dateTime || e.start?.date,
-    end: e.end?.dateTime || e.end?.date,
-    allDay: !!e.start?.date,
+    ...normalizeAllDayRange({
+      start: e.start?.dateTime || e.start?.date,
+      end: e.end?.dateTime || e.end?.date,
+      allDay: !!e.start?.date,
+    }),
     readOnly: !["owner", "writer"].includes(calendar.accessRole),
     source: "google",
     timeZone: e.start?.timeZone,

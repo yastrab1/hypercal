@@ -64,3 +64,21 @@ test("authoritative updates, removals and pending untag/delete tombstones invali
     rmSync(root, { recursive: true, force: true });
   }
 });
+test("same-date all-day events in an existing disk cache remain available throughout their day", () => {
+  const root = mkdtempSync(join(tmpdir(), "hypercal-tag-dates-"));
+  try {
+    const cache = new TagCache(root, () => Date.parse("2026-11-01T12:00:00Z"));
+    cache.remember("alice", [
+      { ...event, allDay: true, start: "2026-11-01", end: "2026-11-01" },
+    ]);
+    const reopened = new TagCache(root, () =>
+      Date.parse("2026-11-01T12:00:00Z"),
+    );
+    assert.equal(
+      reopened.nearest("alice", "Exam", ["primary"]).end,
+      "2026-11-02",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

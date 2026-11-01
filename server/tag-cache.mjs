@@ -1,3 +1,4 @@
+import { normalizeAllDayRange } from "../src/event-range.mjs";
 import {
   mkdirSync,
   readFileSync,
@@ -30,6 +31,9 @@ export class TagCache {
   read(account) {
     try {
       const data = JSON.parse(readFileSync(this.file(account), "utf8"));
+      if (data.version === 1 && data.events && typeof data.events === "object")
+        for (const record of Object.values(data.events))
+          if (record.event) record.event = normalizeAllDayRange(record.event);
       return data.version === 1 &&
         data.events &&
         typeof data.events === "object"

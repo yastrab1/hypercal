@@ -1,3 +1,4 @@
+import { normalizeAllDayRange } from "./event-range.mjs";
 const PREFIX = "hypercal.cache.v1.";
 const MAX_AGE = 14 * 86400000;
 const MAX_RANGES = 6;
@@ -9,6 +10,12 @@ export function createCalendarCache(storage, now = Date.now) {
       const previous = decoded.get(key);
       if (previous?.raw === raw) return previous.value;
       const value = JSON.parse(raw);
+      // Repair legacy cached provider events once per decode, including offline
+      // launches. Preserve object identities for already valid event ranges.
+      if (value?.ranges && typeof value.ranges === "object")
+        for (const range of Object.values(value.ranges))
+          if (Array.isArray(range?.events))
+            range.events = range.events.map(normalizeAllDayRange);
       decoded.set(key, { raw, value });
       if (decoded.size > 2) decoded.delete(decoded.keys().next().value);
       return value;
