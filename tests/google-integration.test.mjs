@@ -180,6 +180,9 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
     ).json();
     assert.equal(cs[0].name, "Alice");
     assert.equal(cs[0].readOnly, false);
+    assert.equal(cs.find((c) => c.id === "primary").owned, true);
+    assert.equal(cs.find((c) => c.id === "target").owned, false);
+    assert.equal(cs.find((c) => c.id === "readonly").owned, false);
     const newCalendar = await fetch(`${origin}/api/calendars`, {
       method: "POST",
       headers: alice,

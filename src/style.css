@@ -5227,8 +5227,18 @@ button.tag-track {
   padding-block: 16px;
 }
 .tag-rule-form .view-calendar-picker {
-  max-height: 240px;
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
+}
+.tag-calendar-group h4 {
+  margin: 16px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.tag-rule-form .calendar-toggle > span {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .tag-rule-form .small {
   line-height: 1.5;

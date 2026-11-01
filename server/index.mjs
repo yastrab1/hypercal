@@ -641,6 +641,7 @@ app.get("/api/calendars", auth, async (req, res) => {
         color: c.backgroundColor || "#5750d9",
         readOnly: !["owner", "writer"].includes(c.accessRole),
         primary: !!c.primary,
+        owned: c.accessRole === "owner",
         source: "google",
       }))
       .concat(

@@ -6,6 +6,7 @@ export interface Calendar {
   readOnly: boolean;
   source: "google" | "ical" | "demo";
   primary?: boolean;
+  owned?: boolean;
 }
 export interface Tag {
   rule?: {

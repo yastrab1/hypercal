@@ -244,6 +244,21 @@ function TagRuleForm({
 }) {
   const [rule, setRule] = useState(tag.rule || manual);
   const [color, setColor] = useState(tag.color);
+  const [calendarQuery, setCalendarQuery] = useState("");
+  const shown = calendars.filter((calendar) =>
+    calendar.name
+      .toLocaleLowerCase()
+      .includes(calendarQuery.trim().toLocaleLowerCase()),
+  );
+  const external = (calendar: Calendar) =>
+    calendar.source === "ical" || calendar.owned === false || calendar.readOnly;
+  const groups = [
+    { name: "Other calendars", values: shown.filter(external) },
+    {
+      name: "My calendars",
+      values: shown.filter((calendar) => !external(calendar)),
+    },
+  ];
   return (
     <form
       className="editor-form tag-rule-form"
@@ -285,28 +300,55 @@ function TagRuleForm({
           <>
             <span className="field-label">Calendars</span>
             <p className="small muted">None selected means all calendars.</p>
+            <label className="field">
+              Find a calendar
+              <input
+                type="search"
+                value={calendarQuery}
+                onChange={(e) => setCalendarQuery(e.target.value)}
+                placeholder="e.g. Prask"
+              />
+              <small>
+                {calendars.length} calendars available, including shared
+                calendars and subscriptions.
+              </small>
+            </label>
             <div className="view-calendar-picker">
-              {calendars.map((calendar) => (
-                <label className="calendar-toggle" key={calendar.id}>
-                  <input
-                    type="checkbox"
-                    checked={rule.calendarIds.includes(calendar.id)}
-                    style={{ accentColor: calendar.color }}
-                    onChange={() =>
-                      setRule({
-                        ...rule,
-                        calendarIds: rule.calendarIds.includes(calendar.id)
-                          ? rule.calendarIds.filter((id) => id !== calendar.id)
-                          : [...rule.calendarIds, calendar.id],
-                      })
-                    }
-                  />
-                  <span>
-                    {calendar.name}
-                    {calendar.readOnly ? " (read-only)" : ""}
-                  </span>
-                </label>
-              ))}
+              {groups
+                .filter((group) => group.values.length)
+                .map((group) => (
+                  <div className="tag-calendar-group" key={group.name}>
+                    <h4>{group.name}</h4>
+                    {group.values.map((calendar) => (
+                      <label className="calendar-toggle" key={calendar.id}>
+                        <input
+                          type="checkbox"
+                          checked={rule.calendarIds.includes(calendar.id)}
+                          style={{ accentColor: calendar.color }}
+                          onChange={() =>
+                            setRule({
+                              ...rule,
+                              calendarIds: rule.calendarIds.includes(
+                                calendar.id,
+                              )
+                                ? rule.calendarIds.filter(
+                                    (id) => id !== calendar.id,
+                                  )
+                                : [...rule.calendarIds, calendar.id],
+                            })
+                          }
+                        />
+                        <span>
+                          {calendar.name}
+                          {calendar.readOnly ? " (read-only)" : ""}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ))}
+              {!shown.length && (
+                <p className="small muted">No calendars match this name.</p>
+              )}
               {rule.calendarIds
                 .filter((id) => !calendars.some((c) => c.id === id))
                 .map((id) => (
