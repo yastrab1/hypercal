@@ -35,3 +35,25 @@ tailscale funnel --https=10000 off
 ```
 
 Do not reset the whole Serve/Funnel configuration: other services use it.
+
+## CI deployment
+
+`.github/workflows/deploy.yml` follows successful `main` push runs of **Build and
+ test**. A repository-scoped runner named `hypercal-r2d2-deploy` on R2D2 has only
+ the custom `hypercal-deploy-r2d2` label. It runs as the existing `r2d2` user via
+ `systemctl --user status hypercal-actions-runner.service`; its installation is
+ `/home/r2d2/hypercal-actions-runner`. No SSH key or personal GitHub token is
+ stored in CI. Registration uses GitHub's short-lived runner registration token.
+
+The deployment checks out the successful build's exact SHA, skips superseded
+main builds, downloads its signed Android artifact, and verifies its checksum
+and update metadata. `scripts/deploy/r2d2.sh` builds an image labeled with that
+SHA and recreates only `hypercal`. The browser worker, account data and private
+configuration remain in place. Payload files are replaced atomically and update
+metadata is published last, preserving the existing downloads bind mount.
+
+CI verifies container health, image revision, public HTML, update metadata and
+the complete downloaded APK. Failure restores the previous image and Android
+files. The last successful SHA is recorded in `/home/r2d2/hypercal/.deployed-sha`.
+The dedicated runner uses [GitHub's service entry point](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/configure-the-application?platform=linux)
+under the existing user service manager, which has lingering enabled.
