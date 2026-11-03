@@ -13,8 +13,10 @@ import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     private AppUpdater updater;
+    AppUpdater updater() { return updater; }
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(UpdatesPlugin.class);
         super.onCreate(savedInstanceState);
         updater = new AppUpdater(this);
         // Own insets here. Capacitor's compatibility handler pads the whole

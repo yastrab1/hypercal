@@ -7,6 +7,10 @@ import android.content.pm.PackageManager;
 import android.content.pm.Signature;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.util.Log;
 import android.provider.Settings;
 import android.widget.Toast;
 import androidx.core.content.FileProvider;
@@ -24,44 +28,83 @@ final class AppUpdater {
     private static final int MAX_APK = 32 * 1024 * 1024;
     private final MainActivity activity;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private boolean active, running, waitingForPermission;
-    private long lastCheck;
+    private final UpdateSchedule schedule = new UpdateSchedule();
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable poll = () -> startCheck(false);
+    private boolean waitingForPermission;
+    private boolean closed;
+    private AlertDialog prompt;
+    private String status = "Not checked yet.";
+    private long pendingCode;
+    private String pendingName;
     private File pending;
 
     AppUpdater(MainActivity activity) { this.activity = activity; }
 
     void resume() {
-        active = true;
+        schedule.resume();
         if (waitingForPermission) {
             waitingForPermission = false;
-            if (Build.VERSION.SDK_INT < 26 || activity.getPackageManager().canRequestPackageInstalls()) install();
-            else Toast.makeText(activity, "Update saved. Allow HyperCal to install updates when you are ready.", Toast.LENGTH_LONG).show();
-            return;
+            if (Build.VERSION.SDK_INT < 26 || activity.getPackageManager().canRequestPackageInstalls()) {
+                install();
+                return;
+            }
+            Toast.makeText(activity, "Update saved. Allow HyperCal to install updates when you are ready.", Toast.LENGTH_LONG).show();
+            defer(pendingCode);
         }
-        if (running || System.currentTimeMillis() - lastCheck < 15 * 60_000) return;
-        running = true;
-        lastCheck = System.currentTimeMillis();
+        showPending();
+        startCheck(false);
+    }
+
+    String status() { return status; }
+    boolean checking() { return schedule.running; }
+
+    void checkNow() {
+        activity.getSharedPreferences("updates", 0).edit()
+            .remove("deferredVersion").remove("deferredAt").apply();
+        showPending();
+        startCheck(true);
+    }
+
+    private void startCheck(boolean manual) {
+        if (closed || !schedule.begin(SystemClock.elapsedRealtime(), manual)) return;
+        handler.removeCallbacks(poll);
+        status = "Checking for updates…";
         executor.execute(() -> {
-            try { check(); }
-            catch (Exception ignored) { /* Offline or invalid update: keep the installed app usable. */ }
-            finally { activity.runOnUiThread(() -> running = false); }
+            boolean success = false;
+            String result;
+            try { result = check(); success = true; }
+            catch (Exception error) {
+                Log.w("HypercalUpdater", "Update check failed", error);
+                result = "Could not check for updates. Retrying shortly.";
+            }
+            final String message = result;
+            final boolean checked = success;
+            handler.post(() -> {
+                if (closed) return;
+                status = message;
+                schedule.finish(SystemClock.elapsedRealtime(), checked);
+                showPending();
+                if (schedule.active) handler.postDelayed(poll, schedule.delay(SystemClock.elapsedRealtime()));
+            });
         });
     }
 
-    void pause() { active = false; }
-    void close() { active = false; executor.shutdownNow(); }
+    void pause() { schedule.pause(); handler.removeCallbacks(poll); }
+    void close() { closed = true; pause(); handler.removeCallbacksAndMessages(null); executor.shutdownNow(); }
 
     private HttpURLConnection connection(String path) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(ORIGIN + path).openConnection();
         c.setInstanceFollowRedirects(false);
         c.setConnectTimeout(10_000);
         c.setReadTimeout(20_000);
+        c.setUseCaches(false);
         c.setRequestProperty("Cache-Control", "no-cache");
         if (c.getResponseCode() != 200) { c.disconnect(); throw new IOException("Update unavailable"); }
         return c;
     }
 
-    private void check() throws Exception {
+    private String check() throws Exception {
         JSONObject metadata;
         HttpURLConnection c = connection("/downloads/android-update.json");
         try (InputStream input = c.getInputStream(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -78,14 +121,14 @@ final class AppUpdater {
         long code = metadata.getLong("versionCode");
         long size = metadata.getLong("size");
         String hash = metadata.getString("sha256");
-        if (code <= version(installed) || size <= 0 || size > MAX_APK || !hash.matches("[a-f0-9]{64}")) return;
-        if (!activity.getPackageName().equals(metadata.getString("packageId"))) return;
+        if (code <= version(installed)) return "HyperCal is up to date.";
+        if (size <= 0 || size > MAX_APK || !hash.matches("[a-f0-9]{64}")) throw new IOException("Invalid update metadata");
+        if (!activity.getPackageName().equals(metadata.getString("packageId"))) throw new IOException("Update package mismatch");
         String versionName = metadata.getString("versionName");
-        if (versionName.length() > 60) return;
-        android.content.SharedPreferences prefs = activity.getSharedPreferences("updates", 0);
-        if (prefs.getLong("deferredVersion", 0) == code && System.currentTimeMillis() - prefs.getLong("deferredAt", 0) < 24 * 3600_000L) return;
+        if (versionName.length() > 60) throw new IOException("Invalid update version");
+        if (deferred(code)) return "Version " + versionName + " postponed. Check for updates to install now.";
         File dir = new File(activity.getCacheDir(), "updates");
-        if (!dir.isDirectory() && !dir.mkdirs()) return;
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Cannot create update directory");
         File apk = new File(dir, "hypercal-" + code + ".apk");
         if (!apk.isFile() || apk.length() != size || !digest(apk).equals(hash)) {
             File temp = new File(dir, "download.tmp");
@@ -100,27 +143,47 @@ final class AppUpdater {
                 if (total != size) throw new IOException("Incomplete download");
                 out.getFD().sync();
             } finally { c.disconnect(); }
-            if (!digest(temp).equals(hash)) { temp.delete(); return; }
-            if (!temp.renameTo(apk)) { temp.delete(); return; }
+            if (!digest(temp).equals(hash)) { temp.delete(); throw new IOException("Update checksum mismatch"); }
+            if (!temp.renameTo(apk)) { temp.delete(); throw new IOException("Cannot save update"); }
         }
         PackageInfo archive = pm.getPackageArchiveInfo(apk.getAbsolutePath(), PackageManager.GET_SIGNATURES);
         if (archive == null || !installed.packageName.equals(archive.packageName) || version(archive) != code ||
-            !signers(installed).equals(signers(archive)) || signers(installed).isEmpty()) { apk.delete(); return; }
+            !signers(installed).equals(signers(archive)) || signers(installed).isEmpty()) { apk.delete(); throw new IOException("Update signing identity or version mismatch"); }
         for (File old : Objects.requireNonNull(dir.listFiles())) if (!old.equals(apk)) old.delete();
-        activity.runOnUiThread(() -> {
-            if (!active || activity.isFinishing() || activity.isDestroyed()) return;
-            pending = apk;
-            new AlertDialog.Builder(activity)
+        activity.runOnUiThread(() -> downloaded(apk, code, versionName));
+        return "Version " + versionName + " is ready to install.";
+    }
+
+    // Called on the UI thread only after download/package/signature validation.
+    void downloaded(File apk, long code, String name) {
+        if (closed) return;
+        pending = apk;
+        pendingCode = code;
+        pendingName = name;
+        showPending();
+    }
+
+    private boolean deferred(long code) {
+        android.content.SharedPreferences prefs = activity.getSharedPreferences("updates", 0);
+        return prefs.getLong("deferredVersion", 0) == code && System.currentTimeMillis() - prefs.getLong("deferredAt", 0) < 24 * 3600_000L;
+    }
+
+    private void showPending() {
+        if (pending == null || !pending.isFile() || !schedule.active || closed ||
+            activity.isFinishing() || activity.isDestroyed() || prompt != null || deferred(pendingCode)) return;
+        prompt = new AlertDialog.Builder(activity)
                 .setTitle("HyperCal update ready")
-                .setMessage("Version " + versionName + " has downloaded. Install it now?")
+                .setMessage("Version " + pendingName + " has downloaded. Install it now?")
                 .setPositiveButton("Install", (dialog, which) -> install())
-                .setNegativeButton("Later", (dialog, which) -> defer(code))
-                .setOnCancelListener(dialog -> defer(code))
-                .show();
-        });
+                .setNegativeButton("Later", (dialog, which) -> defer(pendingCode))
+                .setOnCancelListener(dialog -> defer(pendingCode))
+                .create();
+        prompt.setOnDismissListener(dialog -> prompt = null);
+        prompt.show();
     }
 
     private void defer(long code) {
+        status = "Version " + pendingName + " postponed. Check for updates to install now.";
         activity.getSharedPreferences("updates", 0).edit().putLong("deferredVersion", code)
             .putLong("deferredAt", System.currentTimeMillis()).apply();
     }

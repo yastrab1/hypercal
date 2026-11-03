@@ -1,4 +1,5 @@
 import { TagSettings } from "./TagSettings";
+import { AppVersion } from "./AppVersion";
 import { PluginsPanel } from "./PluginsPanel";
 import { continuousFor } from "./scroll-options.mjs";
 import { ScrollOptions } from "./ScrollOptions";
@@ -2479,6 +2480,7 @@ export default function App() {
                 }}
               />
             </label>
+            <AppVersion />
           </div>
         </Panel>
       )}

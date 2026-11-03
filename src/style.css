@@ -5254,3 +5254,13 @@ button.tag-track {
     min-height: 44px;
   }
 }
+
+.app-version-settings {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 20px;
+}
+.app-version-settings .settings-divider { width: 100%; margin: 0 0 8px; }
+.app-version-settings p { margin: 0; }
