@@ -52,3 +52,25 @@ npm run perf:report
 ```
 
 Fixtures are development tools and are excluded from the normal web/APK build. Automated regression tests cover indexed overlap/ribbon equivalence, midnight ends, DST, timezone changes, cache eviction/isolation, unchanged/changed provider records, and concurrent-read isolation/retry. Browser checks cover event details/editing, scrolling, date popovers, keyboard hour navigation, and desktop/phone layouts.
+
+## Continuous scroll prefetch, 2026-11-03
+
+Each day/week boundary previously notified the owning app even when its entire
+prefetch window was inside event chunks already requested. This scheduled app
+renders and prefetch/cache checks during scrolling. The viewport now retains the
+last requested chunk coverage and notifies the owner only when a required chunk
+falls outside it. It retains the larger coverage when a boundary-aligned window
+briefly shrinks. Native scrolling, inertia, settling, and prefetch distances are
+unchanged.
+
+For 120 consecutive forward crossings starting January 5, 2026, the notifications
+fall from 120 to 61 in month view (49.2% fewer) and from 120 to 9 in week view
+(92.5% fewer). This measures redundant scheduled updates, not frame rate or
+physical Android performance. Regression coverage checks every required chunk
+through forward/backward scrolling and large navigation jumps. Run it in a DST
+timezone with:
+
+```sh
+TZ=Europe/Bratislava node --test tests/prefetch-gate.test.mjs
+TZ=Europe/Bratislava node scripts/performance/scroll-prefetch.mjs
+```

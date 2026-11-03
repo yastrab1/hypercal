@@ -18,13 +18,17 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         updater = new AppUpdater(this);
         // Own insets here. Capacitor's compatibility handler pads the whole
-        // decor view on older WebViews, leaving grey bands even in immersive mode.
+        // decor view on older WebViews, leaving grey bands at the edges.
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         ViewCompat.setOnApplyWindowInsetsListener(getWindow().getDecorView(), (view, insets) -> {
             int keyboard = insets.isVisible(WindowInsetsCompat.Type.ime())
                 ? insets.getInsets(WindowInsetsCompat.Type.ime()).bottom : 0;
-            view.setPadding(0, 0, 0, keyboard);
-            // Immersive mode hides system bars, but the camera still occupies
+            Insets navigation = insets.getInsets(WindowInsetsCompat.Type.navigationBars());
+            // Keep content and editor actions clear of gesture/three-button
+            // navigation, and avoid adding the keyboard inset twice.
+            view.setPadding(navigation.left, 0, navigation.right,
+                Math.max(keyboard, navigation.bottom));
+            // The status bar is hidden, but the camera still occupies
             // physical pixels. Expose its height to the countdown inset rail.
             int cutoutTop = insets.getDisplayCutout() == null ? 0
                 : insets.getDisplayCutout().getSafeInsetTop();
@@ -47,7 +51,7 @@ public class MainActivity extends BridgeActivity {
             getWindow().setNavigationBarContrastEnforced(false);
         }
         getWindow().getDecorView().setBackgroundColor(Color.TRANSPARENT);
-        useFullScreen();
+        configureSystemBars();
         ViewCompat.requestApplyInsets(getWindow().getDecorView());
     }
 
@@ -55,7 +59,7 @@ public class MainActivity extends BridgeActivity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
-            useFullScreen();
+            configureSystemBars();
             ViewCompat.requestApplyInsets(getWindow().getDecorView());
         }
     }
@@ -78,11 +82,14 @@ public class MainActivity extends BridgeActivity {
         super.onDestroy();
     }
 
-    private void useFullScreen() {
+    private void configureSystemBars() {
         WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
             getWindow(), getWindow().getDecorView());
-        controller.setSystemBarsBehavior(
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-        controller.hide(WindowInsetsCompat.Type.systemBars());
+        // Immersive navigation can consume the first edge swipe to reveal the
+        // system controls before Capacitor receives Back. Keep Android's Back
+        // gesture available so its existing JS handler returns straight to month.
+        controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_DEFAULT);
+        controller.show(WindowInsetsCompat.Type.navigationBars());
+        controller.hide(WindowInsetsCompat.Type.statusBars());
     }
 }

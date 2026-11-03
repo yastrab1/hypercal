@@ -12,6 +12,7 @@ import { CalendarCanvas } from "./Calendar";
 import { monthRange, shiftPeriod } from "./period.mjs";
 import { observeMonthWheel } from "./month-wheel.mjs";
 import { observeScrollEnd } from "./scroll-end.mjs";
+import { createPrefetchGate } from "./prefetch-gate.mjs";
 
 type Props = ComponentProps<typeof CalendarCanvas> & {
   continuous?: boolean;
@@ -74,6 +75,10 @@ function ContinuousCalendar({
     );
   }, [month]);
   const lastApproach = useRef(-1);
+  const prefetch = useMemo(() => createPrefetchGate(props.layout), [props.layout]);
+  const approach = (date: Date) => {
+    if (prefetch(date)) callbacks.current.onApproach?.(date);
+  };
   // The gutter follows the viewport media query used by CalendarCanvas,
   // not the available calendar width after the desktop sidebar is deducted.
   const gutter = size.compact ? 36 : 60;
@@ -126,10 +131,8 @@ function ContinuousCalendar({
         ? { top: index * unit, behavior: "instant" }
         : { left: index * unit, behavior: "instant" },
     );
-    lastApproach.current = -1;
-    callbacks.current.onApproach?.(
-      currentIndex !== null ? dayAt(currentIndex) : target,
-    );
+    lastApproach.current = index;
+    approach(currentIndex !== null ? dayAt(currentIndex) : target);
   }, [props.date.getTime(), unit]);
   useEffect(() => {
     const stop = observeScrollEnd(root.current!, () => settleRef.current());
@@ -202,7 +205,7 @@ function ContinuousCalendar({
         }
         if (lastApproach.current !== index) {
           lastApproach.current = index;
-          callbacks.current.onApproach?.(dayAt(index));
+          approach(dayAt(index));
         }
       });
   };

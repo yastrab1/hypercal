@@ -5,7 +5,9 @@ const config: CapacitorConfig = {
   webDir: "dist",
   plugins: {
     SystemBars: {
-      hidden: true,
+      // MainActivity hides only the status bar. Hiding navigation here puts
+      // Android in immersive mode and can consume the first system Back swipe.
+      hidden: false,
       insetsHandling: "disable",
       initialViewportFitValueHint: "cover",
     },
