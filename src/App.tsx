@@ -806,6 +806,10 @@ export default function App() {
       setCsrf(s.csrf);
       setSession(s);
       setVerified(true);
+      // A verified session is a successful round trip. Continuous (desktop)
+      // scrolling never runs the single-range fetch that used to be the only
+      // place clearing this, so a past blip left the editor disabled forever.
+      setSyncFailed(false);
       setBootError("");
       if (!s.connected) {
         calendarCache.forget();
@@ -903,6 +907,7 @@ export default function App() {
         );
         calendarCache.writeMetadata(session!.user!, c, v);
         setDataAccount(accountId);
+        setSyncFailed(false);
       })
       .catch((e) => {
         if (!cancelled) {
