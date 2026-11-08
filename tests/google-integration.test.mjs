@@ -42,6 +42,8 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
   await writeFile(join(dir, "accounts.json"), JSON.stringify(accounts));
   const upstream = [];
   const copies = [];
+  const targetEvents = [];
+  let targetPatches = 0;
   let rejectPatch = false;
   let eventReads = 0;
   const originalRequest = OAuth2Client.prototype.request;
@@ -109,11 +111,26 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       copies.push(structuredClone(body));
       return { data: { ...body, id: "copy1", etag: '"copy-v1"' } };
     }
+    if (path === "/calendar/v3/calendars/target/events" && method === "GET")
+      return { data: { items: structuredClone(targetEvents) } };
+    if (path === "/calendar/v3/calendars/readonly/events" && method === "GET")
+      return { data: { items: [] } };
+    if (
+      path === "/calendar/v3/calendars/target/events/lunch" &&
+      ["GET", "PATCH"].includes(method)
+    ) {
+      if (method === "PATCH") {
+        assert.equal(options.headers["If-Match"], targetEvents[0].etag);
+        Object.assign(targetEvents[0], body, { etag: '"t2"' });
+        targetPatches++;
+      }
+      return { data: structuredClone(targetEvents[0]) };
+    }
     if (
       path === "/calendar/v3/calendars/primary/events/event1" &&
       method === "PATCH"
     ) {
-      assert.equal(options.headers["If-Match"], '"v1"');
+      assert.equal(options.headers["If-Match"], upstream[0].etag);
       if (rejectPatch)
         throw Object.assign(new Error("Precondition failed"), { status: 412 });
       Object.assign(upstream[0], body, { etag: '"v2"' });
@@ -295,6 +312,73 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       JSON.parse(upstream[0].extendedProperties.shared.hypercalTags),
       ["Exam"],
     );
+    // The calendar chosen in the editor is the Google POST destination.
+    const chosen = await fetch(`${origin}/api/events`, {
+      method: "POST",
+      headers: alice,
+      body: JSON.stringify({
+        ...draft,
+        calendarId: "target",
+        title: "Created in Projects",
+        tags: [],
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    assert.equal(chosen.status, 201);
+    assert.equal((await chosen.json()).summary, "Created in Projects");
+    assert.equal(copies.length, 1);
+    assert.equal(copies[0].summary, "Created in Projects");
+    assert(!upstream.some((e) => e.summary === "Created in Projects"));
+    copies.pop();
+    for (const calendarId of ["readonly", "missing"]) {
+      const rejected = await fetch(`${origin}/api/events`, {
+        method: "POST",
+        headers: alice,
+        body: JSON.stringify({ ...draft, calendarId, title: "Nope" }),
+        signal: AbortSignal.timeout(5000),
+      });
+      assert.equal(rejected.status, 403);
+      await rejected.json();
+    }
+    assert.equal(copies.length, 0);
+    assert(!upstream.some((e) => e.summary === "Nope"));
+    const bad = await fetch(`${origin}/api/events`, {
+      method: "POST",
+      headers: alice,
+      body: JSON.stringify({ ...draft, recurrence: "custom" }),
+      signal: AbortSignal.timeout(5000),
+    });
+    assert.equal(bad.status, 400);
+    await bad.json();
+    const zero = await fetch(`${origin}/api/events`, {
+      method: "POST",
+      headers: alice,
+      body: JSON.stringify({
+        ...draft,
+        recurrence: "custom",
+        recurrenceInterval: { every: 0, unit: "day" },
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    assert.equal(zero.status, 400);
+    await zero.json();
+    const repeating = await fetch(`${origin}/api/events`, {
+      method: "POST",
+      headers: alice,
+      body: JSON.stringify({
+        ...draft,
+        title: "Every three months",
+        recurrence: "custom",
+        recurrenceInterval: { every: 3, unit: "month" },
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    assert.equal(repeating.status, 201);
+    await repeating.json();
+    assert.deepEqual(upstream.at(-1).recurrence, [
+      "RRULE:FREQ=MONTHLY;INTERVAL=3",
+    ]);
+    upstream.pop();
     let countdowns;
     for (let i = 0; i < 100; i++) {
       countdowns = await (
@@ -604,6 +688,96 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       if (!state.scanning) break;
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
+    // OR criteria: every event of Projects, plus regex matches elsewhere.
+    upstream.push({
+      id: "event1",
+      etag: '"v1"',
+      summary: "Final exam",
+      start: { date: "2027-01-20" },
+      end: { date: "2027-01-21" },
+    });
+    targetEvents.push({
+      id: "lunch",
+      etag: '"t1"',
+      summary: "Lunch",
+      start: { date: "2027-02-01" },
+      end: { date: "2027-02-02" },
+    });
+    const union = {
+      name: "Union",
+      color: "#4b99d2",
+      rule: {
+        mode: "automatic",
+        criteria: [
+          { calendarMode: "only", calendarIds: ["target"] },
+          {
+            calendarMode: "except",
+            calendarIds: ["target"],
+            include: "exam",
+            exclude: "practice",
+          },
+        ],
+      },
+    };
+    const savedUnion = await fetch(`${origin}/api/tags`, {
+      method: "PUT",
+      headers: alice,
+      body: JSON.stringify([...tagDefinitions, union]),
+    });
+    assert.equal(savedUnion.status, 200);
+    const expectedUnion = {
+      ...union,
+      rule: { ...union.rule, calendarIds: [], include: "", exclude: "" },
+    };
+    expectedUnion.rule.criteria = union.rule.criteria.map((c) => ({
+      include: "",
+      exclude: "",
+      ...c,
+    }));
+    const stored = async () =>
+      JSON.parse(await readFile(join(dir, "accounts.json"), "utf8")).accounts
+        .alice.tags;
+    assert.deepEqual((await savedUnion.json()).at(-1), expectedUnion);
+    assert.deepEqual((await stored()).at(-1), expectedUnion);
+    assert.deepEqual(
+      (await (await fetch(`${origin}/api/tags`, { headers: alice })).json()).at(
+        -1,
+      ),
+      expectedUnion,
+    );
+    const tagged = (event) =>
+      JSON.parse(event.extendedProperties?.shared?.hypercalTags || "[]");
+    for (let i = 0; i < 600; i++) {
+      if (
+        tagged(upstream[0]).includes("Union") &&
+        tagged(targetEvents[0]).includes("Union")
+      )
+        break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert(
+      tagged(upstream[0]).includes("Union"),
+      "regex match in other calendar",
+    );
+    assert(
+      tagged(targetEvents[0]).includes("Union"),
+      "whole Projects calendar",
+    );
+    assert.equal(targetPatches, 1);
+    await fetch(`${origin}/api/tag-tracking`, {
+      method: "PUT",
+      headers: alice,
+      body: JSON.stringify({ viewKey: "layout:month", tagNames: ["Union"] }),
+    });
+    let unionCountdown;
+    for (let i = 0; i < 200; i++) {
+      unionCountdown = await (
+        await fetch(`${origin}/api/tag-countdowns`, { headers: alice })
+      ).json();
+      if (!unionCountdown.refreshing) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.match(unionCountdown.next.Union.start, /^2027-01-20/);
     await fetch(`${origin}/api/tags`, {
       method: "PUT",
       headers: alice,

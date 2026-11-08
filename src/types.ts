@@ -8,12 +8,19 @@ export interface Calendar {
   primary?: boolean;
   owned?: boolean;
 }
+export interface TagCriterion {
+  calendarMode: "any" | "only" | "except";
+  calendarIds: string[];
+  include: string;
+  exclude: string;
+}
 export interface Tag {
   rule?: {
     mode: "event" | "automatic";
     calendarIds: string[];
     include: string;
     exclude: string;
+    criteria?: TagCriterion[];
   };
   name: string;
   color: string;

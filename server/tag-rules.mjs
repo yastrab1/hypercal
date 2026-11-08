@@ -20,12 +20,52 @@ export function rulePattern(value) {
   compiled.set(value, pattern);
   return pattern;
 }
+const criterionSchema = z.object({
+  // any: all calendars; only: the listed calendars; except: every other calendar.
+  calendarMode: z.enum(["any", "only", "except"]).default("any"),
+  calendarIds: z.array(z.string().min(1).max(1024)).max(40).default([]),
+  include: z.string().max(500).default(""),
+  exclude: z.string().max(500).default(""),
+});
+// Saved pre-union rules have only top-level calendarIds/include/exclude.
+// They are read as one criterion; no stored data needs rewriting.
+export function ruleCriteria(rule) {
+  if (Array.isArray(rule?.criteria) && rule.criteria.length)
+    return rule.criteria.map((c) => ({
+      calendarMode: c.calendarMode || (c.calendarIds?.length ? "only" : "any"),
+      calendarIds: c.calendarIds || [],
+      include: c.include || "",
+      exclude: c.exclude || "",
+    }));
+  return [
+    {
+      calendarMode: rule?.calendarIds?.length ? "only" : "any",
+      calendarIds: rule?.calendarIds || [],
+      include: rule?.include || "",
+      exclude: rule?.exclude || "",
+    },
+  ];
+}
+export function criterionCoversCalendar(criterion, calendarId) {
+  if (
+    criterion.calendarMode === "only" ||
+    criterion.calendarMode === "except"
+  ) {
+    const listed = criterion.calendarIds.includes(calendarId);
+    return criterion.calendarMode === "only" ? listed : !listed;
+  }
+  return true;
+}
+export function ruleCoversCalendar(rule, calendarId) {
+  return ruleCriteria(rule).some((c) => criterionCoversCalendar(c, calendarId));
+}
 export const tagRuleSchema = z
   .object({
     mode: z.enum(["event", "automatic"]).default("event"),
     calendarIds: z.array(z.string().min(1).max(1024)).max(40).default([]),
     include: z.string().max(500).default(""),
     exclude: z.string().max(500).default(""),
+    criteria: z.array(criterionSchema).max(20).optional(),
   })
   .superRefine((rule, ctx) => {
     for (const field of ["include", "exclude"]) {
@@ -35,16 +75,38 @@ export const tagRuleSchema = z
         ctx.addIssue({ code: "custom", path: [field], message: error.message });
       }
     }
-  });
+    (rule.criteria || []).forEach((criterion, index) => {
+      for (const field of ["include", "exclude"]) {
+        try {
+          rulePattern(criterion[field]);
+        } catch (error) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["criteria", index, field],
+            message: error.message,
+          });
+        }
+      }
+    });
+  })
+  .transform((rule) =>
+    rule.criteria?.length
+      ? // Criteria are authoritative; legacy mirrors are cleared so they cannot
+        // be mistaken for a second, conflicting criterion.
+        { ...rule, calendarIds: [], include: "", exclude: "" }
+      : rule,
+  );
+function matchesCriterion(criterion, event, text) {
+  return (
+    criterionCoversCalendar(criterion, event.calendarId) &&
+    (!criterion.include || rulePattern(criterion.include).test(text)) &&
+    (!criterion.exclude || !rulePattern(criterion.exclude).test(text))
+  );
+}
 export function matchesTagRule(rule, event) {
   if (rule?.mode !== "automatic") return false;
-  if (rule.calendarIds?.length && !rule.calendarIds.includes(event.calendarId))
-    return false;
   const text = `${event.title || ""}\n${event.description || ""}\n${event.location || ""}`;
-  return (
-    (!rule.include || rulePattern(rule.include).test(text)) &&
-    (!rule.exclude || !rulePattern(rule.exclude).test(text))
-  );
+  return ruleCriteria(rule).some((c) => matchesCriterion(c, event, text));
 }
 export function automaticEventTags(definitions = [], event) {
   const automatic = definitions.filter((tag) => tag.rule?.mode === "automatic");

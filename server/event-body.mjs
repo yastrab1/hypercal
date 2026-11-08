@@ -1,7 +1,30 @@
 import { googleColorFields, readEventColor } from "../src/event-colors.mjs";
 import { googleTagFields, readEventTags } from "./tags.mjs";
 import { shiftSeriesTime } from "./recurrence.mjs";
+const FREQ = { day: "DAILY", month: "MONTHLY", year: "YEARLY" };
+// Builds an RFC 5545 RRULE. Google evaluates it in the event's own time zone
+// (timed events) or as floating dates (all-day), so intervals count calendar
+// days/months/years, not 24-hour spans, across DST changes. Monthly/yearly
+// rules anchored on a day that does not exist (31st, Feb 29) skip those
+// periods, exactly as RFC 5545 and Google Calendar do.
+export function recurrenceRule(e) {
+  const kind = e.recurrence;
+  if (!kind || kind === "none") return null;
+  if (kind === "custom") {
+    const { every, unit } = e.recurrenceInterval || {};
+    if (!Number.isInteger(every) || every < 1 || !FREQ[unit])
+      throw Object.assign(
+        new Error(
+          "Choose a repeat interval of 1 or more days, months or years.",
+        ),
+        { status: 400, expose: true },
+      );
+    return `RRULE:FREQ=${FREQ[unit]}${every > 1 ? `;INTERVAL=${every}` : ""}`;
+  }
+  return `RRULE:FREQ=${kind.toUpperCase()}`;
+}
 export function eventBody(e) {
+  const rule = recurrenceRule(e);
   const time = e.allDay
     ? { start: { date: e.start }, end: { date: e.end } }
     : {
@@ -39,9 +62,7 @@ export function eventBody(e) {
             },
           }
         : {}),
-    ...(e.recurrence && e.recurrence !== "none"
-      ? { recurrence: [`RRULE:FREQ=${e.recurrence.toUpperCase()}`] }
-      : {}),
+    ...(rule ? { recurrence: [rule] } : {}),
   };
 }
 export function scopedEventBody(draft, target, occurrence) {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Check, Trash2 } from "lucide-react";
 import { api } from "./api";
-import type { Tag, Calendar } from "./types";
+import type { Tag, TagCriterion, Calendar } from "./types";
 
 const manual = {
   mode: "event" as const,
@@ -9,6 +9,24 @@ const manual = {
   include: "",
   exclude: "",
 };
+const blankCriterion: TagCriterion = {
+  calendarMode: "any",
+  calendarIds: [],
+  include: "",
+  exclude: "",
+};
+// Pre-union saved rules have no criteria list; show them as one criterion.
+function criteriaOf(rule: NonNullable<Tag["rule"]>): TagCriterion[] {
+  if (rule.criteria?.length) return rule.criteria;
+  return [
+    {
+      calendarMode: rule.calendarIds.length ? "only" : "any",
+      calendarIds: rule.calendarIds,
+      include: rule.include,
+      exclude: rule.exclude,
+    },
+  ];
+}
 export function TagSettings({
   tags,
   calendars,
@@ -243,6 +261,12 @@ function TagRuleForm({
   onDelete: () => void;
 }) {
   const [rule, setRule] = useState(tag.rule || manual);
+  const criteria = criteriaOf(rule);
+  const update = (index: number, patch: Partial<TagCriterion>) =>
+    setRule({
+      ...rule,
+      criteria: criteria.map((c, i) => (i === index ? { ...c, ...patch } : c)),
+    });
   const [color, setColor] = useState(tag.color);
   const [calendarQuery, setCalendarQuery] = useState("");
   const shown = calendars.filter((calendar) =>
@@ -264,7 +288,14 @@ function TagRuleForm({
       className="editor-form tag-rule-form"
       onSubmit={(e) => {
         e.preventDefault();
-        void onSave({ ...tag, color, rule });
+        void onSave({
+          ...tag,
+          color,
+          rule:
+            rule.mode === "automatic"
+              ? { ...rule, calendarIds: [], include: "", exclude: "", criteria }
+              : rule,
+        });
       }}
     >
       <fieldset disabled={disabled}>
@@ -293,109 +324,171 @@ function TagRuleForm({
           <small>
             {rule.mode === "event"
               ? "Choose this tag in the event editor. Switching back keeps tags already applied."
-              : "The rule controls this tag. Selected calendars AND include regex must match; exclude regex always wins."}
+              : "The rule controls this tag. An event gets this tag when any match below applies. Within one match, its calendars and include regex must both match and its exclude regex wins."}
           </small>
         </label>
         {rule.mode === "automatic" && (
           <>
-            <span className="field-label">Calendars</span>
-            <p className="small muted">None selected means all calendars.</p>
-            <label className="field">
-              Find a calendar
-              <input
-                type="search"
-                value={calendarQuery}
-                onChange={(e) => setCalendarQuery(e.target.value)}
-                placeholder="e.g. Prask"
-              />
-              <small>
-                {calendars.length} calendars available, including shared
-                calendars and subscriptions.
-              </small>
-            </label>
-            <div className="view-calendar-picker">
-              {groups
-                .filter((group) => group.values.length)
-                .map((group) => (
-                  <div className="tag-calendar-group" key={group.name}>
-                    <h4>{group.name}</h4>
-                    {group.values.map((calendar) => (
-                      <label className="calendar-toggle" key={calendar.id}>
-                        <input
-                          type="checkbox"
-                          checked={rule.calendarIds.includes(calendar.id)}
-                          style={{ accentColor: calendar.color }}
-                          onChange={() =>
-                            setRule({
-                              ...rule,
-                              calendarIds: rule.calendarIds.includes(
-                                calendar.id,
-                              )
-                                ? rule.calendarIds.filter(
-                                    (id) => id !== calendar.id,
-                                  )
-                                : [...rule.calendarIds, calendar.id],
-                            })
-                          }
-                        />
-                        <span>
-                          {calendar.name}
-                          {calendar.readOnly ? " (read-only)" : ""}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                ))}
-              {!shown.length && (
-                <p className="small muted">No calendars match this name.</p>
-              )}
-              {rule.calendarIds
-                .filter((id) => !calendars.some((c) => c.id === id))
-                .map((id) => (
-                  <label className="calendar-toggle" key={id}>
-                    <input
-                      type="checkbox"
-                      checked
-                      onChange={() =>
-                        setRule({
-                          ...rule,
-                          calendarIds: rule.calendarIds.filter(
-                            (value) => value !== id,
-                          ),
-                        })
-                      }
-                    />
-                    <span>Unavailable calendar</span>
-                  </label>
-                ))}
-            </div>
-            <label className="field">
-              Include regex
-              <input
-                value={rule.include}
-                maxLength={500}
-                spellCheck={false}
-                placeholder="exam|test"
-                onChange={(e) => setRule({ ...rule, include: e.target.value })}
-              />
-              <small>
-                Optional. Match title, notes or location, ignoring case.
-              </small>
-            </label>
-            <label className="field">
-              Exclude regex
-              <input
-                value={rule.exclude}
-                maxLength={500}
-                spellCheck={false}
-                placeholder="practice|cancelled"
-                onChange={(e) => setRule({ ...rule, exclude: e.target.value })}
-              />
-              <small>
-                Optional. Matching events are excluded, even when the include
-                pattern matches.
-              </small>
-            </label>
+            {criteria.map((criterion, index) => (
+              <fieldset className="tag-criterion" key={index}>
+                <legend>
+                  {index === 0 ? "Match" : "Or match"} #{index + 1}
+                </legend>
+                <label className="field">
+                  Calendars
+                  <select
+                    value={criterion.calendarMode}
+                    onChange={(e) =>
+                      update(index, {
+                        calendarMode: e.target
+                          .value as TagCriterion["calendarMode"],
+                      })
+                    }
+                  >
+                    <option value="any">All calendars</option>
+                    <option value="only">Only the selected calendars</option>
+                    <option value="except">
+                      All calendars except the selected
+                    </option>
+                  </select>
+                </label>
+                {criterion.calendarMode !== "any" && (
+                  <>
+                    <label className="field">
+                      Find a calendar
+                      <input
+                        type="search"
+                        value={calendarQuery}
+                        onChange={(e) => setCalendarQuery(e.target.value)}
+                        placeholder="e.g. Prask"
+                      />
+                      <small>
+                        {calendars.length} calendars available, including shared
+                        calendars and subscriptions.
+                      </small>
+                    </label>
+                    <div className="view-calendar-picker">
+                      {groups
+                        .filter((group) => group.values.length)
+                        .map((group) => (
+                          <div className="tag-calendar-group" key={group.name}>
+                            <h4>{group.name}</h4>
+                            {group.values.map((calendar) => (
+                              <label
+                                className="calendar-toggle"
+                                key={calendar.id}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={criterion.calendarIds.includes(
+                                    calendar.id,
+                                  )}
+                                  style={{ accentColor: calendar.color }}
+                                  onChange={() =>
+                                    update(index, {
+                                      calendarIds:
+                                        criterion.calendarIds.includes(
+                                          calendar.id,
+                                        )
+                                          ? criterion.calendarIds.filter(
+                                              (id) => id !== calendar.id,
+                                            )
+                                          : [
+                                              ...criterion.calendarIds,
+                                              calendar.id,
+                                            ],
+                                    })
+                                  }
+                                />
+                                <span>
+                                  {calendar.name}
+                                  {calendar.readOnly ? " (read-only)" : ""}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        ))}
+                      {!shown.length && (
+                        <p className="small muted">
+                          No calendars match this name.
+                        </p>
+                      )}
+                      {criterion.calendarIds
+                        .filter((id) => !calendars.some((c) => c.id === id))
+                        .map((id) => (
+                          <label className="calendar-toggle" key={id}>
+                            <input
+                              type="checkbox"
+                              checked
+                              onChange={() =>
+                                update(index, {
+                                  calendarIds: criterion.calendarIds.filter(
+                                    (value) => value !== id,
+                                  ),
+                                })
+                              }
+                            />
+                            <span>Unavailable calendar</span>
+                          </label>
+                        ))}
+                    </div>
+                  </>
+                )}
+                <label className="field">
+                  Include regex
+                  <input
+                    value={criterion.include}
+                    maxLength={500}
+                    spellCheck={false}
+                    placeholder="exam|test"
+                    onChange={(e) => update(index, { include: e.target.value })}
+                  />
+                  <small>
+                    Optional. Empty matches every event in these calendars.
+                    Matches title, notes or location, ignoring case.
+                  </small>
+                </label>
+                <label className="field">
+                  Exclude regex
+                  <input
+                    value={criterion.exclude}
+                    maxLength={500}
+                    spellCheck={false}
+                    placeholder="practice|cancelled"
+                    onChange={(e) => update(index, { exclude: e.target.value })}
+                  />
+                  <small>
+                    Optional. Excludes events from this match only, even when
+                    its include pattern matches.
+                  </small>
+                </label>
+                {criteria.length > 1 && (
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() =>
+                      setRule({
+                        ...rule,
+                        criteria: criteria.filter((_, i) => i !== index),
+                      })
+                    }
+                  >
+                    <Trash2 size={15} /> Remove match #{index + 1}
+                  </button>
+                )}
+              </fieldset>
+            ))}
+            {criteria.length < 20 && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  setRule({ ...rule, criteria: [...criteria, blankCriterion] })
+                }
+              >
+                <Plus size={15} /> Add another match (OR)
+              </button>
+            )}
             <p className="small muted">
               Use patterns without / delimiters. Lookarounds and backreferences
               are not supported. Events support up to 12 tags.

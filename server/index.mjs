@@ -780,7 +780,15 @@ const eventSchema = z
       .regex(/^#[\da-f]{6}$/i)
       .nullable()
       .optional(),
-    recurrence: z.enum(["none", "daily", "weekly", "monthly"]).optional(),
+    recurrence: z
+      .enum(["none", "daily", "weekly", "monthly", "yearly", "custom"])
+      .optional(),
+    recurrenceInterval: z
+      .object({
+        every: z.number().int().min(1).max(999),
+        unit: z.enum(["day", "month", "year"]),
+      })
+      .optional(),
     timeZone: z
       .string()
       .max(80)
@@ -805,11 +813,25 @@ const eventSchema = z
           z.iso.datetime({ offset: true }).safeParse(e.end).success,
     { message: "Choose valid start and end dates." },
   )
+  .refine((e) => e.recurrence !== "custom" || !!e.recurrenceInterval, {
+    message: "Choose a repeat interval of 1 or more days, months or years.",
+  })
   .refine((e) => new Date(e.end) > new Date(e.start), {
     message: "End must be after start.",
   });
 app.post("/api/events", auth, async (req, res) => {
   const e = eventSchema.parse(req.body);
+  // The chosen destination must be a calendar this account can write to.
+  const destination = (
+    await allPages(
+      req.session.accountId,
+      "users/me/calendarList?maxResults=250",
+    )
+  ).find((c) => c.id === e.calendarId);
+  if (!destination || !["owner", "writer"].includes(destination.accessRole))
+    return res
+      .status(403)
+      .json({ error: "Choose a calendar you can write to." });
   e.tags = automaticEventTags(getAccount(req.session.accountId).tags, e);
   const result = await googleRequest(
     req.session.accountId,

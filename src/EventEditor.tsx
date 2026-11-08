@@ -44,7 +44,11 @@ export function EventEditor({
   offline: boolean;
   email?: string;
   notificationDefault: string;
-  onSave: (e: CalendarEvent, recurrence: string) => Promise<void>;
+  onSave: (
+    e: CalendarEvent,
+    recurrence: string,
+    interval?: { every: number; unit: "day" | "month" | "year" },
+  ) => Promise<void>;
   onDelete: (e: CalendarEvent) => Promise<void>;
   onClose: () => void;
 }) {
@@ -61,11 +65,12 @@ export function EventEditor({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [deleting, setDeleting] = useState(false);
+  const defaultCalendarId = () =>
+    calendars.find((c) => c.primary && !c.readOnly)?.id ||
+    calendars.find((c) => !c.readOnly)?.id ||
+    "";
   const [calendarId, setCalendarId] = useState(
-    event?.calendarId ||
-      calendars.find((c) => c.primary && !c.readOnly)?.id ||
-      calendars.find((c) => !c.readOnly)?.id ||
-      "",
+    event?.calendarId || defaultCalendarId(),
   );
   const initialReminder = !event
     ? notificationDefault
@@ -76,6 +81,9 @@ export function EventEditor({
         : String(event.reminderMinutes);
   const [reminder, setReminder] = useState(initialReminder),
     [reminderChanged, setReminderChanged] = useState(!event);
+  const [repeat, setRepeat] = useState("none"),
+    [every, setEvery] = useState("2"),
+    [unit, setUnit] = useState<"day" | "month" | "year">("day");
   const form = useRef<HTMLFormElement>(null);
   const readOnly = !!event?.readOnly;
   const disabled = readOnly || offline || busy;
@@ -110,6 +118,12 @@ export function EventEditor({
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const calendar = calendars.find((c) => c.id === calendarId);
   const writable = calendars.filter((c) => !c.readOnly);
+  // Calendars can finish loading (or permissions change) after the editor
+  // opens; never keep a missing/read-only selection for a new event.
+  useEffect(() => {
+    if (event || writable.some((c) => c.id === calendarId)) return;
+    setCalendarId(defaultCalendarId());
+  });
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -129,6 +143,18 @@ export function EventEditor({
       : withoutDatePhrase(title, quickDate);
     if (!cleanTitle) {
       setError("Add an event title as well as a date.");
+      return;
+    }
+    if (!writable.some((c) => c.id === calendarId) && !event) {
+      setError("Choose a calendar you can write to.");
+      return;
+    }
+    const everyNumber = Number(every);
+    if (
+      repeat === "custom" &&
+      !(/^\d+$/.test(every.trim()) && everyNumber >= 1 && everyNumber <= 999)
+    ) {
+      setError("Repeat interval must be a whole number from 1 to 999.");
       return;
     }
     const f = new FormData(e.currentTarget);
@@ -162,7 +188,8 @@ export function EventEditor({
           timeZone: timezone,
           ...(reminderChanged ? notificationFields(reminder) : {}),
         },
-        String(f.get("recurrence") || "none"),
+        repeat,
+        repeat === "custom" ? { every: everyNumber, unit } : undefined,
       );
     } catch (e) {
       setError((e as Error).message);
@@ -337,10 +364,15 @@ export function EventEditor({
               <span>{timezone}</span>
             </div>
             {!event && (
-              <label className="event-detail-row">
+              <div className="event-detail-row event-repeat-row">
                 <Repeat2 size={20} />
                 <span className="sr-only">Repeats</span>
-                <select name="recurrence" aria-label="Repeats">
+                <select
+                  name="recurrence"
+                  aria-label="Repeats"
+                  value={repeat}
+                  onChange={(e) => setRepeat(e.target.value)}
+                >
                   <option value="none">Does not repeat</option>
                   <option value="daily" disabled={!live}>
                     Every day
@@ -351,8 +383,47 @@ export function EventEditor({
                   <option value="monthly" disabled={!live}>
                     Every month
                   </option>
+                  <option value="yearly" disabled={!live}>
+                    Every year
+                  </option>
+                  <option value="custom" disabled={!live}>
+                    Custom…
+                  </option>
                 </select>
-              </label>
+                {repeat === "custom" && (
+                  <span className="event-repeat-custom">
+                    Every
+                    <input
+                      aria-label="Repeat every"
+                      type="number"
+                      min={1}
+                      max={999}
+                      step={1}
+                      inputMode="numeric"
+                      required
+                      value={every}
+                      onChange={(e) => setEvery(e.target.value)}
+                    />
+                    <select
+                      aria-label="Repeat unit"
+                      value={unit}
+                      onChange={(e) =>
+                        setUnit(e.target.value as "day" | "month" | "year")
+                      }
+                    >
+                      <option value="day">
+                        {every.trim() === "1" ? "day" : "days"}
+                      </option>
+                      <option value="month">
+                        {every.trim() === "1" ? "month" : "months"}
+                      </option>
+                      <option value="year">
+                        {every.trim() === "1" ? "year" : "years"}
+                      </option>
+                    </select>
+                  </span>
+                )}
+              </div>
             )}
           </div>
           <div className="event-editor-section">

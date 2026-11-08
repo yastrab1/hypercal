@@ -1193,7 +1193,11 @@ export default function App() {
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
   });
-  async function saveEvent(draft: CalendarEvent, recurrence: string) {
+  async function saveEvent(
+    draft: CalendarEvent,
+    recurrence: string,
+    recurrenceInterval?: { every: number; unit: "day" | "month" | "year" },
+  ) {
     const scope = await requestScope(editingEvent, "edit");
     if (!scope) return;
     const missing = cleanTags(draft.tags).filter(
@@ -1220,6 +1224,7 @@ export default function App() {
       ...draft,
       scope,
       recurrence: editingEvent ? undefined : recurrence,
+      recurrenceInterval: editingEvent ? undefined : recurrenceInterval,
     };
     await api(
       editingEvent ? `/events/${encodeURIComponent(draft.id)}` : "/events",

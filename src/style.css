@@ -5264,3 +5264,42 @@ button.tag-track {
 }
 .app-version-settings .settings-divider { width: 100%; margin: 0 0 8px; }
 .app-version-settings p { margin: 0; }
+.tag-criterion {
+  border: 1px solid var(--line, rgba(128, 128, 128, 0.35));
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  display: grid;
+  gap: 8px;
+}
+.tag-criterion legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+label.quick-calendar-chip {
+  position: relative;
+  min-width: 0;
+}
+.quick-calendar-chip select {
+  min-width: 0;
+  max-width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0 2px;
+  min-height: 24px;
+  text-overflow: ellipsis;
+}
+.event-repeat-row {
+  flex-wrap: wrap;
+}
+.event-repeat-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 32px;
+}
+.event-repeat-custom input {
+  width: 4.5em;
+}

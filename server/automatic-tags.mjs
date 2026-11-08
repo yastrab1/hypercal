@@ -1,6 +1,6 @@
 import { getAccount, upsertAccount } from "./store.mjs";
 import { allPages, googleRequest, normalizeEvent } from "./google.mjs";
-import { automaticEventTags } from "./tag-rules.mjs";
+import { automaticEventTags, ruleCoversCalendar } from "./tag-rules.mjs";
 import { readEventTags, googleTagFields } from "./tags.mjs";
 import { applyTagAliases } from "./tag-aliases.mjs";
 
@@ -182,9 +182,7 @@ export function createAutomaticTags(
           calendar.accessRole === "freeBusyReader" ||
           (!touched.has(calendar.id) &&
             !rules.some(
-              (tag) =>
-                !tag.rule.calendarIds.length ||
-                tag.rule.calendarIds.includes(calendar.id),
+              (tag) => ruleCoversCalendar(tag.rule, calendar.id),
             ))
         )
           continue;

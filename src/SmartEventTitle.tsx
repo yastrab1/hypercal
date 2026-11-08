@@ -53,7 +53,8 @@ export function SmartEventTitle({
       input.current?.setSelectionRange(mention.from, mention.from);
     });
   };
-  const calendar = calendars.find((c) => c.id === calendarId);
+  const writable = calendars.filter((c) => !c.readOnly);
+  const calendar = writable.find((c) => c.id === calendarId);
   return (
     <div className="smart-title">
       <label className="field title-field">
@@ -142,21 +143,27 @@ export function SmartEventTitle({
       {smart && (
         <>
           <div className="quick-entry-chips">
-            {calendar && (
-              <button
-                type="button"
-                className="quick-calendar-chip"
-                aria-label="Choose calendar by typing"
-                onClick={() => {
-                  const next = value.trimEnd() + (value.trimEnd() ? " @" : "@");
-                  onChange(next);
-                  setCaret(next.length);
-                  setDismissed(false);
-                  input.current?.focus();
-                }}
-              >
-                <i style={{ background: calendar.color }} />@{calendar.name}
-              </button>
+            {writable.length > 0 && (
+              <label className="quick-calendar-chip">
+                <i style={{ background: calendar?.color }} />
+                <span className="sr-only">Calendar</span>
+                <select
+                  aria-label="Choose calendar"
+                  value={calendar?.id ?? ""}
+                  onChange={(e) => onCalendar(e.target.value)}
+                >
+                  {!calendar && (
+                    <option value="" disabled>
+                      Choose a calendar
+                    </option>
+                  )}
+                  {writable.map((c) => (
+                    <option value={c.id} key={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             )}
             {date && (
               <button
