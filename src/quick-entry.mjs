@@ -1,4 +1,4 @@
-import { addDays, format, startOfDay } from "date-fns";
+import { addDays, format, startOfDay, startOfWeek } from "date-fns";
 
 const weekdays = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 // All dates are local calendar dates. Never use elapsed milliseconds across DST.
@@ -45,9 +45,13 @@ export function parseQuickDate(text, now = new Date()) {
         const weekday = weekdays.indexOf(
           phrase.replace(/^next\s+/, "").slice(0, 3),
         );
-        let delta = (weekday - date.getDay() + 7) % 7;
-        if (phrase.startsWith("next ") && delta === 0) delta = 7;
-        date = addDays(date, delta);
+        if (phrase.startsWith("next ")) {
+          // "next X" is X in the following Monday-based calendar week.
+          date = addDays(
+            startOfWeek(date, { weekStartsOn: 1 }),
+            7 + ((weekday + 6) % 7),
+          );
+        } else date = addDays(date, (weekday - date.getDay() + 7) % 7);
       }
     }
     result = {

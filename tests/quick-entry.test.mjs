@@ -82,3 +82,14 @@ test("calendar selection is accent-insensitive, fuzzy and excludes read-only cal
   });
   assert.equal(calendarMention("email@example.com", 17), null);
 });
+
+test("next weekday means that weekday in the following Monday-based week", () => {
+  const sunday = new Date(2026, 10, 8), wednesday = new Date(2026, 10, 11);
+  assert.equal(parseQuickDate("next wed", sunday).date, "2026-11-11");
+  assert.equal(parseQuickDate("next mon", sunday).date, "2026-11-09");
+  assert.equal(parseQuickDate("next wed", wednesday).date, "2026-11-18");
+  assert.equal(parseQuickDate("next sun", wednesday).date, "2026-11-22");
+  assert.equal(parseQuickDate("wed", sunday).date, "2026-11-11");
+  assert.equal(parseQuickDate("1.2.26", sunday).date, "2026-02-01");
+  assert.equal(parseQuickDate("1.2.31", sunday).date, "2031-02-01");
+});
