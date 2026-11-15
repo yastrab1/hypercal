@@ -153,6 +153,19 @@ function ContinuousCalendar({
       ),
     );
   };
+  const reportViewportDate = (index: number) => {
+    // Programmatic month alignment can start in the previous month (e.g.
+    // Nov 1 on Sunday). Preserve its requested heading until the row changes.
+    if (reportedIndex.current === index) return;
+    reportedIndex.current = index;
+    const date = addDays(dayAt(index), month ? 3 : 0);
+    if (reported.current !== date.getTime()) {
+      // Mark the date before notifying the parent so its render does not
+      // reposition the viewport and interrupt the ongoing gesture.
+      reported.current = date.getTime();
+      callbacks.current.onViewportDate(date);
+    }
+  };
   const settled = () => {
     const element = root.current;
     if (!element) return;
@@ -179,15 +192,7 @@ function ContinuousCalendar({
       );
       return;
     }
-    // Programmatic month alignment can start in the previous month (e.g.
-    // Nov 1 on Sunday). Its scrollend must preserve the requested heading.
-    if (reportedIndex.current === index) return;
-    reportedIndex.current = index;
-    const date = addDays(dayAt(index), month ? 3 : 0);
-    if (reported.current !== date.getTime()) {
-      reported.current = date.getTime();
-      callbacks.current.onViewportDate(date);
-    }
+    reportViewportDate(index);
   };
   settleRef.current = settled;
   const scroll = () => {
@@ -196,6 +201,7 @@ function ContinuousCalendar({
         frame.current = 0;
         const index = position();
         visibleIndex.current = index;
+        reportViewportDate(index);
         // Move only the rendered window. Never reset scrollLeft/scrollTop here.
         if (index < windowIndex + 3 || index > windowIndex + count - 10) {
           const next = Math.max(0, Math.min(total - count, index - before));
