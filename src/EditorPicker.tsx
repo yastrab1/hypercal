@@ -83,7 +83,9 @@ export function EditorPicker({
       className={"editor-picker" + (above ? " opens-above" : "")}
       ref={root}
       onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget)) close();
+        // Safari can report no focus target while tapping an option. The
+        // outside-pointer listener handles leaving the picker in that case.
+        if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget)) close();
       }}
       onKeyDown={(e) => {
         if (!open) return;
@@ -180,6 +182,7 @@ export function EditorPicker({
                 key={o.value}
                 disabled={o.disabled}
                 aria-pressed={selected.includes(o.value)}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => pick(o.value)}
               >
                 {o.color && <i style={{ background: o.color }} />}
