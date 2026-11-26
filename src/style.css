@@ -5492,3 +5492,239 @@ label.quick-calendar-chip {
   color: var(--muted);
   font-size: 11px;
 }
+
+/* Event editor surfaces follow the calendar theme; the event color stays local. */
+.event-editor {
+  --editor-fill: color-mix(in srgb, var(--muted) 8%, var(--paper));
+  --editor-hover: color-mix(in srgb, var(--muted) 14%, var(--paper));
+}
+.event-panel,
+.quick-event-panel {
+  background: var(--paper);
+}
+.event-editor .title-field {
+  margin: 4px 0 12px;
+}
+.event-editor .title-field input {
+  font-size: clamp(23px, 3vw, 29px);
+  letter-spacing: -0.035em;
+  font-weight: 600;
+  line-height: 1.25;
+  padding: 8px 0;
+}
+.event-editor .quick-entry-chips,
+.event-editor .quick-entry-help {
+  margin-left: 0;
+}
+.event-editor .quick-entry-help {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.event-editor .event-editor-section {
+  padding: 2px 0;
+  border: 0;
+}
+.event-editor .property-label {
+  color: var(--muted);
+  font-size: 13px;
+  flex: 0 0 65px;
+}
+.event-editor .editor-calendar-info,
+.event-editor .event-detail-row,
+.event-editor .event-tag-section {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-height: 44px;
+  margin: 0;
+}
+.event-editor .event-detail-row:has(.editor-picker) {
+  align-items: center;
+}
+.event-editor .event-detail-row > svg,
+.event-editor .event-detail-row:has(.editor-picker) > svg,
+.event-editor .editor-calendar-info > svg,
+.event-editor .event-tag-section > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin: 0;
+  color: var(--muted);
+}
+.event-editor .editor-calendar-info {
+  flex-wrap: wrap;
+}
+.editor-calendar-info small {
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+.event-editor .editor-schedule {
+  background: var(--editor-fill);
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  margin: 12px 0;
+  padding: 10px 14px 7px;
+}
+.schedule-heading,
+.schedule-heading h3 {
+  display: flex;
+  align-items: center;
+}
+.schedule-heading {
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.schedule-heading h3 {
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+}
+.event-editor .schedule-heading .event-all-day {
+  gap: 8px;
+  font-size: 12px;
+  min-height: 40px;
+}
+.event-editor .event-datetime-row {
+  padding: 0;
+  margin: 3px 0;
+  align-items: center;
+  gap: 5px;
+}
+.event-editor .event-datetime-row .field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  margin: 0;
+}
+.event-editor .event-datetime-row .editor-date-label {
+  min-width: 43px;
+  font-size: 12px;
+}
+.event-editor .event-datetime-row .field:last-child:not(:only-child) {
+  flex: 0 0 115px;
+}
+.event-editor .event-datetime-row input {
+  background: var(--paper);
+  font-size: 14px;
+  border-color: var(--line);
+  border-radius: 8px;
+}
+.event-editor .editor-schedule .event-detail-row:first-of-type {
+  margin-top: 5px;
+}
+.event-editor .editor-picker {
+  position: relative;
+}
+.event-editor .picker-trigger {
+  background: transparent;
+  border-color: transparent;
+  font-size: 14px;
+  min-height: 42px;
+  padding: 5px 8px;
+}
+.event-editor .picker-trigger:hover,
+.event-editor .picker-trigger[aria-expanded="true"] {
+  background: var(--editor-hover);
+}
+.event-editor .picker-trigger > svg {
+  color: var(--muted);
+  width: 13px;
+}
+.event-editor .picker-panel {
+  position: absolute;
+  z-index: 8;
+  inset: auto 0 auto auto;
+  top: 100%;
+  width: max(100%, min(235px, 72vw));
+  background: var(--paper);
+  box-shadow: 0 8px 28px #0003;
+}
+.event-editor .opens-above > .picker-panel {
+  top: auto;
+  bottom: 100%;
+  margin-bottom: 3px;
+}
+.event-editor .quick-entry-chips .picker-panel {
+  left: 0;
+  right: auto;
+}
+.event-editor .quick-entry-chips .picker-trigger,
+.event-editor .quick-date-chip {
+  border: 1px solid var(--line);
+  background: var(--editor-fill);
+  border-radius: 20px;
+  min-height: 36px;
+  padding: 6px 12px;
+}
+.event-editor .picker-options button:hover,
+.event-editor .picker-options button[aria-pressed="true"] {
+  background: var(--editor-hover);
+}
+.event-editor .picker-chip {
+  border-radius: 5px;
+  padding: 3px 7px;
+}
+.event-editor .event-detail-row input:not([type="color"]),
+.event-editor .event-detail-row textarea {
+  font-size: 14px;
+}
+.event-editor .event-detail-row.notes-row {
+  align-items: baseline;
+  border-top: 1px solid var(--line);
+  margin-top: 5px;
+  padding-top: 8px;
+}
+.event-editor .editor-storage-note {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.event-editor .event-repeat-custom {
+  flex-wrap: wrap;
+}
+.event-editor .event-repeat-row:has(.event-repeat-custom) {
+  flex-wrap: wrap;
+}
+.event-editor .event-repeat-custom {
+  width: 100%;
+}
+@media (max-width: 760px) {
+  .event-panel .event-editor-topbar {
+    background: var(--paper);
+  }
+  .event-editor .picker-trigger {
+    min-height: 44px;
+  }
+  .event-editor .event-datetime-row .field:last-child:not(:only-child) {
+    flex-basis: 111px;
+  }
+}
+@media (max-width: 375px) {
+  .event-editor .editor-schedule {
+    padding-inline: 8px;
+  }
+  .event-editor .event-datetime-row .editor-date-label {
+    min-width: 33px;
+  }
+  .event-editor .event-datetime-row input {
+    padding-inline: 3px;
+    font-size: 12px;
+  }
+}
+.event-editor .property-label {
+  white-space: nowrap;
+}
+.event-editor .title-field input:focus-visible {
+  outline: 0;
+  box-shadow: inset 0 -2px var(--accent);
+  border-radius: 0;
+}
+.quick-event-panel:has(.quick-event-details[hidden])
+  .quick-entry-chips
+  .picker-panel {
+  position: static;
+  width: 100%;
+  margin: 4px 0 0;
+}

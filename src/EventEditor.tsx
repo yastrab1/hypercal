@@ -10,6 +10,8 @@ import { useEffect, useRef, useState } from "react";
 import { addDays, differenceInCalendarDays, format } from "date-fns";
 import {
   AlignLeft,
+  Tags,
+  CalendarDays,
   Bell,
   Check,
   Clock,
@@ -249,11 +251,6 @@ export function EventEditor({
           </button>
         )}
       </div>
-      {!live && (
-        <div className="inline-note event-status">
-          Demo event · saved only on this device
-        </div>
-      )}
       {offline && (
         <div className="inline-note event-status">
           Saved event. Connect and sync before editing.
@@ -292,6 +289,8 @@ export function EventEditor({
         <div className="quick-event-details" hidden={!details}>
           {event && (
             <div className="event-editor-section editor-calendar-info">
+              <CalendarDays size={17} />
+              <span className="property-label">Calendar</span>
               {readOnly || event.recurring ? (
                 <span>{calendar?.name || calendarId}</span>
               ) : (
@@ -306,20 +305,25 @@ export function EventEditor({
                   }))}
                 />
               )}
-              {live && email && <small>{email}</small>}
+              {live && email && <small title={email}>{email}</small>}
             </div>
           )}
-          <div className="event-editor-section">
-            <label className="event-all-day">
-              <Clock size={20} />
-              <span>All-day</span>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={allDay}
-                onChange={(e) => setAllDay(e.target.checked)}
-              />
-            </label>
+          <div className="event-editor-section editor-schedule">
+            <div className="schedule-heading">
+              <h3>
+                <Clock size={16} />
+                Schedule
+              </h3>
+              <label className="event-all-day">
+                <span>All-day</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={allDay}
+                  onChange={(e) => setAllDay(e.target.checked)}
+                />
+              </label>
+            </div>
             <div className="event-datetime-row">
               <label className="field">
                 <span className="editor-date-label">Starts</span>
@@ -382,7 +386,8 @@ export function EventEditor({
             </div>
             {!allDay && (
               <div className="event-detail-row">
-                <Globe size={20} />
+                <Globe size={16} />
+                <span className="property-label">Time zone</span>
                 <EditorPicker
                   label="Time zone"
                   value={timezone}
@@ -405,7 +410,7 @@ export function EventEditor({
             {!event && (
               <div className="event-detail-row event-repeat-row">
                 <Repeat2 size={20} />
-                <span className="sr-only">Repeats</span>
+                <span className="property-label">Repeat</span>
                 <EditorPicker
                   label="Repeats"
                   value={repeat}
@@ -455,18 +460,19 @@ export function EventEditor({
           <div className="event-editor-section">
             <label className="event-detail-row">
               <MapPin size={20} />
-              <span className="sr-only">Location</span>
+              <span className="property-label">Location</span>
               <input
                 name="location"
                 aria-label="Location"
-                placeholder="Add location or meeting link"
+                placeholder="Place or meeting link"
                 defaultValue={event?.location}
                 maxLength={1024}
               />
             </label>
           </div>
           <div className="event-editor-section event-tag-section">
-            <span>Tags</span>
+            <Tags size={17} />
+            <span className="property-label">Tags</span>
             <EditorPicker
               label="Tags"
               value={eventTags}
@@ -500,7 +506,8 @@ export function EventEditor({
             />
           </div>
           <div className="event-editor-section event-detail-row">
-            <Palette size={20} />
+            <Palette size={17} />
+            <span className="property-label">Color</span>
             <EditorPicker
               label="Event color"
               value={color}
@@ -541,7 +548,7 @@ export function EventEditor({
           <div className="event-editor-section">
             <div className="event-detail-row">
               <Bell size={20} />
-              <span className="sr-only">Notification</span>
+              <span className="property-label">Reminder</span>
               <NotificationPicker
                 value={reminder}
                 onChange={(value) => {
@@ -554,11 +561,11 @@ export function EventEditor({
           <div className="event-editor-section">
             <label className="event-detail-row notes-row">
               <AlignLeft size={20} />
-              <span className="sr-only">Notes</span>
+              <span className="property-label">Notes</span>
               <textarea
                 name="description"
                 aria-label="Notes"
-                rows={3}
+                rows={2}
                 placeholder="Add description"
                 defaultValue={event?.description}
                 maxLength={8000}
@@ -577,6 +584,11 @@ export function EventEditor({
           <Plus size={17} />
           {details ? "Fewer details" : "More details"}
         </button>
+      )}
+      {!live && (
+        <small className="editor-storage-note">
+          Demo · Saved on this device
+        </small>
       )}
       {error && (
         <p className="form-error" role="alert">

@@ -1,5 +1,12 @@
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 export type Choice = {
   value: string;
@@ -29,6 +36,14 @@ export function EditorPicker({
   const search = useRef<HTMLInputElement>(null);
   const id = useId();
   const [open, setOpen] = useState(false);
+  const [above, setAbove] = useState(false);
+  useLayoutEffect(() => {
+    if (!open || !root.current) return;
+    const bounds = root.current.closest("dialog")?.getBoundingClientRect();
+    const anchor = root.current.getBoundingClientRect();
+    const below = (bounds?.bottom ?? innerHeight) - anchor.bottom;
+    setAbove(below < 250 && anchor.top - (bounds?.top ?? 0) > below);
+  }, [open]);
   const [query, setQuery] = useState("");
   const selected = Array.isArray(value) ? value : [value];
   const current = options.filter((o) => selected.includes(o.value));
@@ -65,7 +80,7 @@ export function EditorPicker({
   }, [open]);
   return (
     <div
-      className="editor-picker"
+      className={"editor-picker" + (above ? " opens-above" : "")}
       ref={root}
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget)) close();
@@ -111,6 +126,13 @@ export function EditorPicker({
             ? current.map((o) => (
                 <span
                   className={multi ? "picker-chip" : "picker-value"}
+                  style={
+                    multi && o.color
+                      ? {
+                          background: `color-mix(in srgb, ${o.color} 18%, var(--paper))`,
+                        }
+                      : undefined
+                  }
                   key={o.value}
                 >
                   {o.color && <i style={{ background: o.color }} />}
