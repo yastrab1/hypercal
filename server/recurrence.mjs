@@ -46,7 +46,10 @@ export function shiftSeriesTime(base, source, desired, zone) {
     .slice(0, 19);
   return desired.date
     ? { date: next.slice(0, 10) }
-    : { dateTime: fromWall(next, desired.timeZone || zone), timeZone: desired.timeZone || zone };
+    : {
+        dateTime: fromWall(next, desired.timeZone || zone),
+        timeZone: desired.timeZone || zone,
+      };
 }
 export function splitRules(master, originalStart) {
   const zone = master.start.timeZone || originalStart.timeZone || "UTC";

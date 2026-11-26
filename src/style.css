@@ -5262,8 +5262,13 @@ button.tag-track {
   gap: 8px;
   margin-top: 20px;
 }
-.app-version-settings .settings-divider { width: 100%; margin: 0 0 8px; }
-.app-version-settings p { margin: 0; }
+.app-version-settings .settings-divider {
+  width: 100%;
+  margin: 0 0 8px;
+}
+.app-version-settings p {
+  margin: 0;
+}
 .tag-criterion {
   border: 1px solid var(--line, rgba(128, 128, 128, 0.35));
   border-radius: 10px;
@@ -5302,4 +5307,188 @@ label.quick-calendar-chip {
 }
 .event-repeat-custom input {
   width: 4.5em;
+}
+
+/* In-panel pickers expand in the editor's scroll area, including on phones. */
+.editor-picker {
+  min-width: 0;
+  flex: 1;
+}
+.picker-trigger,
+.picker-options button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 11px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font: inherit;
+  color: inherit;
+}
+.picker-trigger {
+  background: var(--soft);
+  border-color: var(--line);
+  justify-content: space-between;
+}
+.picker-values,
+.picker-chip,
+.picker-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+.picker-chip {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--paper);
+}
+.editor-picker i,
+.editor-calendar-info i {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex: none;
+}
+.picker-panel {
+  margin-top: 5px;
+  padding: 5px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  animation: editor-reveal 0.14s ease-out;
+}
+.picker-options {
+  max-height: 195px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.picker-options button {
+  background: transparent;
+}
+.picker-options button span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.picker-options button:hover,
+.picker-options button:focus-visible,
+.picker-options button[aria-pressed="true"] {
+  background: var(--soft);
+}
+.picker-trigger svg {
+  flex: none;
+  transition: transform 0.15s ease;
+}
+.picker-trigger[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+.editor-picker .picker-search {
+  width: 100%;
+  padding: 9px;
+  min-height: 40px;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+.event-tag-section {
+  display: grid;
+  gap: 7px;
+}
+.editor-calendar-info {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.editor-calendar-info small {
+  color: var(--muted);
+}
+.event-editor .event-datetime-row input {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  min-height: 40px;
+}
+.event-editor .quick-entry-chips > .editor-picker {
+  flex: 0 1 auto;
+  min-width: 135px;
+}
+.event-editor .event-detail-row:has(.editor-picker) {
+  align-items: flex-start;
+}
+.event-editor .event-detail-row:has(.editor-picker) > svg {
+  margin-top: 10px;
+  flex: none;
+}
+.event-editor .custom-event-color {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding: 8px;
+}
+.event-editor .custom-event-color input[type="color"] {
+  padding: 0;
+  flex: 0 0 30px;
+}
+.event-editor .custom-event-color input.color-hex {
+  flex: 0 0 80px;
+}
+.event-editor .event-detail-row:has(.custom-event-color) .picker-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@keyframes editor-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 760px) {
+  .picker-trigger,
+  .picker-options button {
+    min-height: 44px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .picker-panel,
+  .picker-trigger svg {
+    animation: none;
+    transition: none;
+  }
+}
+.event-editor .event-datetime-row {
+  gap: 8px;
+}
+.event-editor .event-datetime-row .field {
+  min-width: 0;
+}
+.event-editor .event-datetime-row .field:last-child:not(:only-child) {
+  flex: 0 0 112px;
+}
+.picker-options button:disabled {
+  opacity: 0.65;
+}
+@media (max-width: 380px) {
+  .event-editor .event-datetime-row {
+    padding-left: 0;
+  }
+}
+.event-datetime-row:has(.editor-date-label) {
+  align-items: flex-end;
+}
+.editor-date-label {
+  color: var(--muted);
+  font-size: 11px;
 }

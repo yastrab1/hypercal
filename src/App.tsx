@@ -1217,7 +1217,18 @@ export default function App() {
     if (!live) {
       setEvents((es) =>
         editingEvent
-          ? es.map((e) => (e.id === draft.id ? draft : e))
+          ? es.map((e) =>
+              e.id === editingEvent.id &&
+              e.calendarId === editingEvent.calendarId
+                ? {
+                    ...e,
+                    ...draft,
+                    ...(draft.useDefaultReminders
+                      ? { reminderMinutes: undefined }
+                      : {}),
+                  }
+                : e,
+            )
           : [...es, { ...draft, id: crypto.randomUUID(), source: "demo" }],
       );
       close();
@@ -1226,19 +1237,47 @@ export default function App() {
     }
     if (!canWrite)
       throw new Error("Connect and finish syncing before saving changes.");
+    let target = editingEvent;
+    const moving = target && target.calendarId !== draft.calendarId;
+    if (target && moving) {
+      target = await api<CalendarEvent>(
+        `/events/${encodeURIComponent(target.id)}/move`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            calendarId: target.calendarId,
+            destinationCalendarId: draft.calendarId,
+            etag: target.etag,
+          }),
+        },
+      );
+      setEditingEvent(target);
+      calendarCache.invalidateEvents(accountId!);
+      setRefresh((n) => n + 1);
+    }
     const payload = {
       ...draft,
+      etag: target?.etag,
       scope,
-      recurrence: editingEvent ? undefined : recurrence,
-      recurrenceInterval: editingEvent ? undefined : recurrenceInterval,
+      recurrence: target ? undefined : recurrence,
+      recurrenceInterval: target ? undefined : recurrenceInterval,
     };
-    await api(
-      editingEvent ? `/events/${encodeURIComponent(draft.id)}` : "/events",
-      {
-        method: editingEvent ? "PATCH" : "POST",
-        body: JSON.stringify(payload),
-      },
-    );
+    try {
+      await api(
+        target ? `/events/${encodeURIComponent(target.id)}` : "/events",
+        {
+          method: target ? "PATCH" : "POST",
+          body: JSON.stringify(payload),
+        },
+      );
+    } catch (error) {
+      if (moving)
+        throw new Error(
+          "Calendar changed. Other edits could not be saved: " +
+            (error as Error).message,
+        );
+      throw error;
+    }
     calendarCache.invalidateEvents(accountId!);
     setRefresh((n) => n + 1);
     close();
@@ -2569,10 +2608,13 @@ export default function App() {
       )}
       {panel === "goto" && (
         <Panel title="Go to a date" onClose={close} wide>
-          <GoToDate date={date} onGo={(target) => {
-            setDate(target);
-            close();
-          }} />
+          <GoToDate
+            date={date}
+            onGo={(target) => {
+              setDate(target);
+              close();
+            }}
+          />
         </Panel>
       )}
     </div>
@@ -2586,24 +2628,39 @@ function GoToDate({ date, onGo }: { date: Date; onGo: (date: Date) => void }) {
   const target = text ? (match?.phrase === text ? match.date : "") : picked;
   const day = target ? new Date(target + "T12:00:00") : null;
   return (
-    <form onSubmit={(event) => {
-      event.preventDefault();
-      if (day) onGo(day);
-    }}>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (day) onGo(day);
+      }}
+    >
       <label className="field">
         Type a date
-        <input autoFocus value={query} placeholder="in 2 weeks or 20 Oct"
-          aria-describedby="go-date-preview" onChange={(event) => setQuery(event.target.value)} />
+        <input
+          autoFocus
+          value={query}
+          placeholder="in 2 weeks or 20 Oct"
+          aria-describedby="go-date-preview"
+          onChange={(event) => setQuery(event.target.value)}
+        />
       </label>
       <label className="field">
         Or pick a date
-        <input type="date" value={target} onChange={(event) => {
-          setQuery("");
-          setPicked(event.target.value);
-        }} />
+        <input
+          type="date"
+          value={target}
+          onChange={(event) => {
+            setQuery("");
+            setPicked(event.target.value);
+          }}
+        />
       </label>
       <p id="go-date-preview" className="muted" role="status">
-        {day ? format(day, "EEEE, MMMM d, yyyy") : text ? "Enter a date like “20 Oct” or choose one above." : "Choose a date."}
+        {day
+          ? format(day, "EEEE, MMMM d, yyyy")
+          : text
+            ? "Enter a date like “20 Oct” or choose one above."
+            : "Choose a date."}
       </p>
       <button className="primary-button" type="submit" disabled={!day}>
         Go to date <ArrowUpRight size={16} />

@@ -107,6 +107,29 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       method === "GET"
     )
       return { data: structuredClone(upstream[0]) };
+    if (
+      path === "/calendar/v3/calendars/primary/events/move-test" &&
+      method === "GET"
+    )
+      return {
+        data: {
+          ...upstream[0],
+          id: "move-test",
+          recurringEventId: undefined,
+          recurrence: undefined,
+        },
+      };
+    if (
+      path === "/calendar/v3/calendars/primary/events/move-test/move" &&
+      method === "POST"
+    ) {
+      assert.equal(
+        new URL(options.url).searchParams.get("destination"),
+        "target",
+      );
+      assert.equal(options.headers["If-Match"], upstream[0].etag);
+      return { data: { ...upstream[0], id: "move-test", etag: '"moved"' } };
+    }
     if (path === "/calendar/v3/calendars/target/events" && method === "POST") {
       copies.push(structuredClone(body));
       return { data: { ...body, id: "copy1", etag: '"copy-v1"' } };
@@ -783,6 +806,24 @@ test("Google adapter writes upstream, reads upstream changes, checks conflicts a
       headers: alice,
       body: JSON.stringify(tagDefinitions),
     });
+    const move = (eventId, etag) =>
+      fetch(`${origin}/api/events/${eventId}/move`, {
+        method: "POST",
+        headers: alice,
+        body: JSON.stringify({
+          calendarId: "primary",
+          destinationCalendarId: "target",
+          etag,
+        }),
+      });
+    upstream[0].recurringEventId = "series";
+    assert.equal((await move("event1", '"v1"')).status, 400);
+    assert.equal((await move("move-test", '"old"')).status, 412);
+    const moved = await move("move-test", upstream[0].etag);
+    assert.equal(moved.status, 200);
+    const movedEvent = await moved.json();
+    assert.equal(movedEvent.calendarId, "target");
+    assert.equal(movedEvent.etag, '"moved"');
   } finally {
     OAuth2Client.prototype.request = originalRequest;
     await new Promise((resolve) => server.close(resolve));

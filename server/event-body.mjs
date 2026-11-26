@@ -106,7 +106,10 @@ export function scopedEventBody(draft, target, occurrence) {
   if (full.reminders) changes.reminders = full.reminders;
   if (
     draft.allDay !== prior.allDay ||
-    (!draft.allDay && draft.timeZone && occurrence.start.timeZone && draft.timeZone !== occurrence.start.timeZone) ||
+    (!draft.allDay &&
+      draft.timeZone &&
+      occurrence.start.timeZone &&
+      draft.timeZone !== occurrence.start.timeZone) ||
     new Date(draft.start).getTime() !== new Date(prior.start).getTime() ||
     new Date(draft.end).getTime() !== new Date(prior.end).getTime()
   ) {

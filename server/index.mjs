@@ -854,6 +854,41 @@ app.post("/api/events", auth, async (req, res) => {
   );
   res.status(201).json(result);
 });
+app.post("/api/events/:id/move", auth, async (req, res) => {
+  const { calendarId, destinationCalendarId, etag } = z
+    .object({
+      calendarId: z.string().min(1).max(1024),
+      destinationCalendarId: z.string().min(1).max(1024),
+      etag: z.string().min(1),
+    })
+    .parse(req.body);
+  const accountId = req.session.accountId;
+  const path = `calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(req.params.id)}`;
+  const source = await googleRequest(accountId, path);
+  if (source.recurringEventId || source.recurrence?.length)
+    return res
+      .status(400)
+      .json({ error: "Recurring events must stay on their series calendar." });
+  if (source.etag !== etag)
+    return res
+      .status(412)
+      .json({ error: "This event changed. Refresh before moving it." });
+  const moved = await googleRequest(
+    accountId,
+    path +
+      "/move?" +
+      new URLSearchParams({ destination: destinationCalendarId }),
+    { method: "POST", etag },
+  );
+  const event = normalizeEvent(moved, {
+    id: destinationCalendarId,
+    accessRole: "writer",
+    _hypercalAccountId: accountId,
+  });
+  tagCache.remove(accountId, calendarId, req.params.id);
+  tagCache.remember(accountId, [event], { local: true });
+  res.json(event);
+});
 app.post("/api/events/:id/copy", auth, async (req, res) => {
   const { calendarId, destinationCalendarId, etag } = z
     .object({

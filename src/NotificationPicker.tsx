@@ -1,3 +1,4 @@
+import { EditorPicker } from "./EditorPicker";
 import { useEffect, useRef, useState } from "react";
 import {
   notificationPresets,
@@ -39,11 +40,26 @@ export function NotificationPicker({
   };
   return (
     <div className="notification-picker">
-      <select
-        aria-label={label}
+      <EditorPicker
+        label={label}
         value={custom ? "custom" : value}
-        onChange={(e) => {
-          const next = e.target.value;
+        options={[
+          { value: "calendar", label: "Calendar default notification" },
+          { value: "none", label: "No notification" },
+          ...notificationPresets.map((n) => ({
+            value: String(n),
+            label:
+              n === 0
+                ? "At event time"
+                : n === 1440
+                  ? "1 day before"
+                  : n === 60
+                    ? "1 hour before"
+                    : n + " minutes before",
+          })),
+          { value: "custom", label: "Custom reminder" },
+        ]}
+        onChange={(next) => {
           setCustom(next === "custom");
           if (next === "custom") {
             const p = notificationParts(value);
@@ -52,22 +68,8 @@ export function NotificationPicker({
             emit(String(p.amount * p.unit));
           } else emit(next);
         }}
-      >
-        <option value="calendar">Calendar default notification</option>
-        <option value="none">No notification</option>
-        {notificationPresets.map((n) => (
-          <option key={n} value={String(n)}>
-            {n === 0
-              ? "At event time"
-              : n === 1440
-                ? "1 day before"
-                : n === 60
-                  ? "1 hour before"
-                  : `${n} minutes before`}
-          </option>
-        ))}
-        <option value="custom">Custom…</option>
-      </select>
+      />
+
       {custom && (
         <div className="custom-notification">
           <input
@@ -80,15 +82,17 @@ export function NotificationPicker({
             value={amount}
             onChange={(e) => update(e.target.value, unit)}
           />
-          <select
-            aria-label={`${label} unit`}
-            value={unit}
-            onChange={(e) => update(amount, Number(e.target.value))}
-          >
-            <option value={1}>Minutes</option>
-            <option value={60}>Hours</option>
-            <option value={1440}>Days</option>
-          </select>
+          <EditorPicker
+            label={label + " unit"}
+            value={String(unit)}
+            options={[
+              { value: "1", label: "Minutes" },
+              { value: "60", label: "Hours" },
+              { value: "1440", label: "Days" },
+            ]}
+            onChange={(next) => update(amount, Number(next))}
+          />
+
           <span>before</span>
         </div>
       )}

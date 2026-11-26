@@ -1,3 +1,4 @@
+import { EditorPicker } from "./EditorPicker";
 import { useId, useRef, useState } from "react";
 import { CalendarDays, X } from "lucide-react";
 import { format } from "date-fns";
@@ -144,26 +145,16 @@ export function SmartEventTitle({
         <>
           <div className="quick-entry-chips">
             {writable.length > 0 && (
-              <label className="quick-calendar-chip">
-                <i style={{ background: calendar?.color }} />
-                <span className="sr-only">Calendar</span>
-                <select
-                  aria-label="Choose calendar"
-                  value={calendar?.id ?? ""}
-                  onChange={(e) => onCalendar(e.target.value)}
-                >
-                  {!calendar && (
-                    <option value="" disabled>
-                      Choose a calendar
-                    </option>
-                  )}
-                  {writable.map((c) => (
-                    <option value={c.id} key={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <EditorPicker
+                label="Choose calendar"
+                value={calendar?.id || ""}
+                onChange={onCalendar}
+                options={writable.map((c) => ({
+                  value: c.id,
+                  label: c.name,
+                  color: c.color,
+                }))}
+              />
             )}
             {date && (
               <button

@@ -159,8 +159,11 @@ export function EventPopover({
     setError("");
     setDestination(destinations[0]?.id || "");
   }, [event.id, event.calendarId]);
-  const zone = event.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const start = event.allDay ? eventDate(event.start) : new TZDate(event.start, zone),
+  const zone =
+    event.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const start = event.allDay
+      ? eventDate(event.start)
+      : new TZDate(event.start, zone),
     end = event.allDay ? eventDate(event.end) : new TZDate(event.end, zone);
   const last = event.allDay ? addDays(end, -1) : end;
   return (
@@ -396,10 +399,12 @@ export function EventPopover({
           <span>Repeating event</span>
         </div>
       )}
-      {!event.allDay && <div className="preview-row preview-timezone">
-        <Clock size={16} />
-        <span>{zone}</span>
-      </div>}
+      {!event.allDay && (
+        <div className="preview-row preview-timezone">
+          <Clock size={16} />
+          <span>{zone}</span>
+        </div>
+      )}
     </FloatingCard>
   );
 }
