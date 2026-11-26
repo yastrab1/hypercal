@@ -1224,6 +1224,8 @@ export default function App() {
         ...tags,
         ...missing.map((name) => ({ name, color: "#4b99d2" })),
       ]);
+    const moving = !!editingEvent && editingEvent.calendarId !== draft.calendarId;
+    const movedNotice = "Moved to " + (calendars.find(c => c.id === draft.calendarId)?.name || "the selected calendar") + ".";
     if (!live) {
       setEvents((es) =>
         editingEvent
@@ -1242,13 +1244,12 @@ export default function App() {
           : [...es, { ...draft, id: crypto.randomUUID(), source: "demo" }],
       );
       close();
-      flash("Saved in demo. Connect Google to save to your calendar.");
+      flash(moving ? movedNotice : "Saved in demo. Connect Google to save to your calendar.");
       return;
     }
     if (!canWrite)
       throw new Error("Connect and finish syncing before saving changes.");
     let target = editingEvent;
-    const moving = target && target.calendarId !== draft.calendarId;
     if (target && moving) {
       target = await api<CalendarEvent>(
         `/events/${encodeURIComponent(target.id)}/move`,
@@ -1261,7 +1262,11 @@ export default function App() {
           }),
         },
       );
-      setEditingEvent(target);
+      const moved = target;
+      setEvents(es => [...es.filter(e =>
+        !(e.id === editingEvent!.id && e.calendarId === editingEvent!.calendarId) &&
+        !(e.id === moved.id && e.calendarId === moved.calendarId)), moved]);
+      setEditingEvent(moved);
       calendarCache.invalidateEvents(accountId!);
       setRefresh((n) => n + 1);
     }
@@ -1291,7 +1296,7 @@ export default function App() {
     calendarCache.invalidateEvents(accountId!);
     setRefresh((n) => n + 1);
     close();
-    flash("Saved to Google Calendar.");
+    flash(moving ? movedNotice : "Saved to Google Calendar.");
   }
   async function deleteEvent(e: CalendarEvent, scope: RecurrenceScope) {
     if (e.readOnly) throw new Error("This event is read-only.");
