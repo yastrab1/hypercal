@@ -71,6 +71,13 @@ jobs:
             test "$fingerprint" = 95862b39de93e848513408a4ed651574dc7af4b298ed163239a9cbf3e7408950
             echo "HYPERCAL_DEBUG_KEYSTORE=$RUNNER_TEMP/hypercal-signing/debug.keystore" >> "$GITHUB_ENV"
           fi
+      - name: Assign the CI Android build number
+        run: |
+          # Prior releases used hand-assigned codes through 28. Both Gradle and
+          # the update manifest read the stamped file in this checkout.
+          code=$((29 + GITHUB_RUN_NUMBER))
+          sed -i -E "s/^([[:space:]]*versionCode )[0-9]+$/\\1${code}/" android/app/build.gradle
+          grep -Eq "^[[:space:]]*versionCode ${code}$" android/app/build.gradle
       - name: Build Android APK
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest assembleDebug :app:assembleDebugAndroidTest --no-daemon --console=plain
