@@ -1,10 +1,11 @@
 import { addDays, format, startOfDay, startOfWeek } from "date-fns";
 
+const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const weekdays = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 // All dates are local calendar dates. Never use elapsed milliseconds across DST.
 export function parseQuickDate(text, now = new Date()) {
   const pattern =
-    /\b(?:in\s+(\d{1,4})\s+(day|week)s?|today|tomorrow|tmrw|(?:next\s+)?(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)|\d{1,2}\.\s?\d{1,2}\.(?:\d{4}|\d{2})?|\d{1,2}\.\s?\d{1,2})\.?(?!\w)(?!\.\w)/gi;
+    /\b(?:in\s+(\d{1,4})\s+(day|week)s?|today|tomorrow|tmrw|(?:next\s+)?(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)|(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+(\d{4}))?|\d{1,2}\.\s?\d{1,2}\.(?:\d{4}|\d{2})?|\d{1,2}\.\s?\d{1,2})\.?(?!\w)(?!\.\w)/gi;
   let result = null;
   for (const match of text.matchAll(pattern)) {
     // Avoid reading parts of emails, identifiers, decimals with extra dots, etc.
@@ -19,7 +20,9 @@ export function parseQuickDate(text, now = new Date()) {
     else if (["tomorrow", "tmrw"].includes(phrase)) date = addDays(date, 1);
     else if (phrase !== "today") {
       if (/^\d/.test(phrase)) {
-        const [day, month, rawYear] = phrase.split(".").map(Number);
+        const [day, month, rawYear] = match[3]
+          ? [Number(match[3]), months.indexOf(match[4].toLowerCase().slice(0, 3)) + 1, Number(match[5])]
+          : phrase.split(".").map(Number);
         const specifiedYear = rawYear && rawYear < 100 ? 2000 + rawYear : rawYear;
         if (specifiedYear && specifiedYear < 1000) continue;
         if (month < 1 || month > 12 || day < 1 || day > 31) continue;

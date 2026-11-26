@@ -1,6 +1,7 @@
 import { TagSettings } from "./TagSettings";
 import { AppVersion } from "./AppVersion";
 import { PluginsPanel } from "./PluginsPanel";
+import { parseQuickDate } from "./quick-entry.mjs";
 import { continuousFor } from "./scroll-options.mjs";
 import { ScrollOptions } from "./ScrollOptions";
 import { useEventStream } from "./useEventStream";
@@ -2568,33 +2569,46 @@ export default function App() {
       )}
       {panel === "goto" && (
         <Panel title="Go to a date" onClose={close} wide>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const value = new FormData(e.currentTarget).get("date") as string;
-              if (value) {
-                setDate(new Date(value + "T12:00:00"));
-                close();
-              }
-            }}
-          >
-            <label className="field">
-              Date
-              <input
-                autoFocus
-                required
-                name="date"
-                type="date"
-                defaultValue={format(date, "yyyy-MM-dd")}
-              />
-            </label>
-            <button className="primary-button" type="submit">
-              Go to date <ArrowUpRight size={16} />
-            </button>
-          </form>
+          <GoToDate date={date} onGo={(target) => {
+            setDate(target);
+            close();
+          }} />
         </Panel>
       )}
     </div>
+  );
+}
+function GoToDate({ date, onGo }: { date: Date; onGo: (date: Date) => void }) {
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState(format(date, "yyyy-MM-dd"));
+  const text = query.trim();
+  const match = parseQuickDate(text);
+  const target = text ? (match?.phrase === text ? match.date : "") : picked;
+  const day = target ? new Date(target + "T12:00:00") : null;
+  return (
+    <form onSubmit={(event) => {
+      event.preventDefault();
+      if (day) onGo(day);
+    }}>
+      <label className="field">
+        Type a date
+        <input autoFocus value={query} placeholder="in 2 weeks or 20 Oct"
+          aria-describedby="go-date-preview" onChange={(event) => setQuery(event.target.value)} />
+      </label>
+      <label className="field">
+        Or pick a date
+        <input type="date" value={target} onChange={(event) => {
+          setQuery("");
+          setPicked(event.target.value);
+        }} />
+      </label>
+      <p id="go-date-preview" className="muted" role="status">
+        {day ? format(day, "EEEE, MMMM d, yyyy") : text ? "Enter a date like “20 Oct” or choose one above." : "Choose a date."}
+      </p>
+      <button className="primary-button" type="submit" disabled={!day}>
+        Go to date <ArrowUpRight size={16} />
+      </button>
+    </form>
   );
 }
 function ViewEditor({

@@ -26,6 +26,9 @@ test("quick dates resolve relative days, short names, weekdays and European date
     ["thu", "2026-10-29"],
     ["next thu", "2026-11-05"],
     ["in 2 weeks", "2026-11-12"],
+    ["20 oct", "2027-10-20"],
+    ["20 October 2025", "2025-10-20"],
+    ["29 FEB", "2028-02-29"],
     ["29.2", "2028-02-29"],
   ]) {
     const input = `Test event ${phrase}`;
@@ -37,6 +40,7 @@ test("quick dates resolve relative days, short names, weekdays and European date
 test("invalid dates and pieces of identifiers remain literal", () => {
   for (const title of [
     "Report 31.2",
+    "31 April",
     "Version v11.2",
     "mail@mon.com",
     "in 2 daylight",
