@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { addDays, startOfDay } from "date-fns";
 import {
   createCalendarIndex,
+  packMonthWeek,
   calendarDay,
   dateForDay,
 } from "../src/calendar-index.mjs";
@@ -122,4 +123,42 @@ test("changing the device timezone rebuilds cached civil days for existing event
     if (previousTZ === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZ;
   }
+});
+
+test("month packing reuses ribbon lanes from adjacent dates and counts only real overflow", () => {
+  // Tuesday has three all-day events. Wednesday has three timed events and
+  // Thursday has four. Tuesday's last ribbon ends at Wednesday midnight.
+  const index = createCalendarIndex([
+    ...[1, 2, 3].map((n) => ({
+      id: "r" + n,
+      calendarId: "one",
+      allDay: true,
+      start: "2026-11-24",
+      end: "2026-11-25",
+    })),
+    ...["25", "26"].flatMap((day) =>
+      Array.from({ length: day === "25" ? 3 : 4 }, (_, i) => ({
+        id: day + "t" + i,
+        calendarId: "one",
+        start: `2026-11-${day}T1${i}:00:00`,
+        end: `2026-11-${day}T1${i}:30:00`,
+        allDay: false,
+      })),
+    ),
+  ]);
+  const packed = packMonthWeek(
+    index.week(calendarDay(new Date(2026, 10, 23))),
+    3,
+  );
+  assert.equal(packed.ribbons.length, 3);
+  assert.deepEqual(packed.days[2], {
+    slots: [1, 2, 3],
+    overflowRow: undefined,
+    hidden: 0,
+  });
+  assert.deepEqual(packed.days[3], {
+    slots: [1, 2],
+    overflowRow: 3,
+    hidden: 2,
+  });
 });

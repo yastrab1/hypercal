@@ -150,3 +150,35 @@ function makeBucket(number, date, all) {
     },
   };
 }
+
+// A ribbon occupies [start, end), matching its CSS grid column range. A timed
+// event may use any unused lane in its own day, even between spanning events.
+export function packMonthWeek(week, capacity) {
+  const ribbons = week.ribbons.filter(
+    (segment) =>
+      segment.lane < capacity &&
+      (segment.lane < capacity - 1 ||
+        week.days
+          .slice(segment.start, segment.end)
+          .every((day) => day.all.length <= capacity)),
+  );
+  const days = week.days.map((day, i) => {
+    const occupied = new Set(
+      ribbons.filter((s) => s.start <= i && i < s.end).map((s) => s.lane),
+    );
+    const slots = Array.from({ length: capacity }, (_, n) => n + 1).filter(
+      (row) => !occupied.has(row - 1),
+    );
+    const hiddenRibbons = day.spanning.length - occupied.size;
+    const overflowRow =
+      hiddenRibbons > 0 || day.single.length > slots.length
+        ? slots.pop()
+        : undefined;
+    return {
+      slots,
+      overflowRow,
+      hidden: hiddenRibbons + Math.max(0, day.single.length - slots.length),
+    };
+  });
+  return { ribbons, days };
+}

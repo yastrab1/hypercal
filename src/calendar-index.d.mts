@@ -40,3 +40,11 @@ export function createCalendarIndex(
   previous?: CalendarIndex,
   timeZone?: string,
 ): CalendarIndex;
+
+export function packMonthWeek(
+  week: CalendarWeekBucket,
+  capacity: number,
+): {
+  ribbons: CalendarWeekBucket["ribbons"];
+  days: { slots: number[]; overflowRow?: number; hidden: number }[];
+};
