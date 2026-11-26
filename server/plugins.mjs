@@ -19,7 +19,8 @@ const catalog = [
   {
     id: "edupage",
     name: "EduPage",
-    description: "Import upcoming homework and exams into a Google calendar.",
+    description:
+      "Import homework, exams and timetable lessons into Google Calendar.",
     capabilities: ["events.read", "events.write", "calendars.read"],
     triggers: ["open", "interval", "webhook"],
   },
@@ -29,6 +30,7 @@ const configSchema = z.object({
   name: z.string().trim().min(1).max(80).default("EduPage"),
   schoolUrl: z.string().max(200).transform(schoolOrigin),
   calendarId: z.string().min(1).max(1024),
+  lessonCalendarId: z.string().max(1024).default(""),
   enabled: z.boolean().default(false),
   trigger: z.enum(["open", "interval"]).default("open"),
   intervalMinutes: z.number().int().min(5).max(10080).default(60),
@@ -131,18 +133,32 @@ export function createPluginService() {
     [
       "edupage",
       async ({ instance, api }) => {
-        const result = await worker(instance, "scrape");
+        const result = await worker(instance, "scrape", {
+          includeLessons: !!instance.lessonCalendarId,
+        });
+        if (instance.lessonCalendarId && !Array.isArray(result.lessons))
+          throw new Error(
+            "EduPage worker did not return the requested lessons.",
+          );
         api.check();
         instance.subjects = result.subjects;
         instance.preview = result.items.slice(0, 12);
         instance.assignmentCount = result.items.length;
         store.save();
-        return api.events.sync(result.items);
+        return api.events.sync(
+          [...result.items, ...(result.lessons || [])],
+          result.lessonDates || [],
+        );
       },
     ],
   ]);
   const runner = new PluginRunner(store, async (instance, check) => {
     await targetCalendar(instance.owner, instance.calendarId);
+    if (
+      instance.lessonCalendarId &&
+      instance.lessonCalendarId !== instance.calendarId
+    )
+      await targetCalendar(instance.owner, instance.lessonCalendarId);
     check();
     const execute = registry.get(instance.type);
     if (!execute)
@@ -155,8 +171,9 @@ export function createPluginService() {
       check,
       capabilities: manifest.capabilities,
     });
-    api.events.sync = (items) =>
+    api.events.sync = (items, lessonDates) =>
       syncAssignments(instance, items, {
+        lessonDates,
         request: googleRequest,
         save: () => store.save(),
         check,
@@ -249,6 +266,11 @@ export function registerPlugins(app, auth, service, appUrl) {
     const config = configSchema.parse(req.body);
     excludePattern(config.excludeRegex);
     await targetCalendar(req.session.accountId, config.calendarId);
+    if (
+      config.lessonCalendarId &&
+      config.lessonCalendarId !== config.calendarId
+    )
+      await targetCalendar(req.session.accountId, config.lessonCalendarId);
     const instance = store.add(req.session.accountId, config);
     if (
       config.enabled &&
@@ -265,6 +287,11 @@ export function registerPlugins(app, auth, service, appUrl) {
     const config = configSchema.parse(req.body);
     excludePattern(config.excludeRegex);
     await targetCalendar(req.session.accountId, config.calendarId);
+    if (
+      config.lessonCalendarId &&
+      config.lessonCalendarId !== config.calendarId
+    )
+      await targetCalendar(req.session.accountId, config.lessonCalendarId);
     const changedSchool = config.schoolUrl !== prior.schoolUrl;
     const connected =
       (!changedSchool && prior.connected) ||

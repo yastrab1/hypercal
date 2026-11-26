@@ -302,3 +302,60 @@ test("retry after an interrupted insert recovers through provider IDs without du
   assert.equal(result.updated, 1);
   assert.equal(patched, true);
 });
+
+test("lesson substitutions and cancellations update a timed event in the selected lessons calendar", async () => {
+  const { lessonsFrom } = await import("../worker/edupage.mjs");
+  const dbi = {
+    subjects: { 1: { name: "Physics" } },
+    teachers: { 2: { firstname: "Ada", lastname: "Novak" } },
+    classrooms: { 3: { name: "B204" } },
+  };
+  const period = {
+    subjectid: 1,
+    uniperiod: "2",
+    starttime: "9:00",
+    endtime: "9:45",
+    teacherids: [2],
+    classroomids: [3],
+  };
+  const items = (row) =>
+    lessonsFrom(
+      { "2026-11-26": { plan: [row] } },
+      dbi,
+      "https://school.edupage.org",
+    );
+  const conf = {
+    id: "plug",
+    owner: "user",
+    sources: {},
+    calendarId: "homework",
+    lessonCalendarId: "lessons",
+    excludeSubjects: [],
+  };
+  let remote;
+  const io = {
+    save() {},
+    request: async (_, path, opts) => {
+      assert.match(path, /^calendars\/lessons\/events/);
+      if (!opts) return remote;
+      remote = { ...opts.body, etag: "v1" };
+    },
+  };
+  assert.equal((await syncAssignments(conf, items(period), io)).created, 1);
+  assert.equal(remote.location, "B204");
+  assert.match(remote.description, /Ada Novak/);
+  assert.equal(remote.start.dateTime, "2026-11-26T09:00:00");
+  assert.equal(
+    (await syncAssignments(conf, items({ ...period, type: "subst" }), io))
+      .updated,
+    1,
+  );
+  assert.match(remote.summary, /Substitution/);
+  assert.equal(
+    (await syncAssignments(conf, items({ ...period, removed: true }), io))
+      .updated,
+    1,
+  );
+  assert.equal(remote.transparency, "transparent");
+  assert.equal(Object.keys(conf.sources).length, 1);
+});

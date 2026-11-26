@@ -9,6 +9,7 @@ type Instance = {
   name: string;
   schoolUrl: string;
   calendarId: string;
+  lessonCalendarId?: string;
   enabled: boolean;
   trigger: "open" | "interval";
   intervalMinutes: number;
@@ -405,6 +406,9 @@ export function PluginsPanel({
                       name: String(form.get("name")),
                       schoolUrl: String(form.get("schoolUrl")),
                       calendarId: String(form.get("calendarId")),
+                      lessonCalendarId: String(
+                        form.get("lessonCalendarId") || "",
+                      ),
                       enabled: form.get("enabled") === "on",
                       trigger: String(form.get("trigger")),
                       intervalMinutes:
@@ -459,7 +463,7 @@ export function PluginsPanel({
                     />
                   </label>
                   <label className="field">
-                    Sync to calendar
+                    Homework and exams calendar
                     <select
                       name="calendarId"
                       required
@@ -482,6 +486,26 @@ export function PluginsPanel({
                           </option>
                         ))}
                     </select>
+                  </label>
+                  <label className="field">
+                    Lessons calendar
+                    <select
+                      name="lessonCalendarId"
+                      defaultValue={active?.lessonCalendarId || ""}
+                    >
+                      <option value="">Do not sync lessons</option>
+                      {calendars
+                        .filter((c) => c.source === "google" && !c.readOnly)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </select>
+                    <small>
+                      Sync the next 14 days, including substitutions, canceled
+                      lessons, teachers and classrooms.
+                    </small>
                   </label>
                   <label className="checkbox-field">
                     <input

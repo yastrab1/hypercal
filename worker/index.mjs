@@ -3,7 +3,13 @@ import { chromium } from "playwright";
 import { mkdir, readFile, writeFile, rename, chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
-import { schoolOrigin, dashboardData, assignmentsFrom } from "./edupage.mjs";
+import {
+  schoolOrigin,
+  dashboardData,
+  assignmentsFrom,
+  lessonPlan,
+  lessonsFrom,
+} from "./edupage.mjs";
 
 const root = process.env.PROFILE_DIR || "/profiles";
 await mkdir(root, { recursive: true, mode: 0o700 });
@@ -181,7 +187,57 @@ async function environmentSignIn(session) {
     );
   }
 }
-async function collect(key, session) {
+async function collectLessons(session, data) {
+  const request = session.context.request;
+  const date = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Bratislava",
+  }).format(new Date());
+  const first = new Date(date + "T12:00:00Z");
+  const dateAt = (offset) =>
+    new Date(+first + offset * 86400000).toISOString().slice(0, 10);
+  const days = {};
+  // The day dashboard may answer a range request with only the selected day
+  // and its neighbours. Request uncovered dates instead of assuming coverage.
+  for (let offset = 0; offset < 14; offset++) {
+    const day = dateAt(offset);
+    if (days[day]) continue;
+    const page = await request.get(
+      session.origin + "/dashboard/eb.php?mode=ttday",
+    );
+    const html = await page.text();
+    const gpid = html.match(/gpid=(\d+)/)?.[1];
+    const gsh = html.match(/gsh=([^"&<>\s]+)/)?.[1];
+    if (!data.userid || !gpid || !gsh)
+      throw new Error("EduPage did not provide a signed timetable session.");
+    const response = await request.post(session.origin + "/gcall", {
+      form: {
+        gpid: String(Number(gpid) + 1),
+        gsh,
+        action: "loadData",
+        user: String(data.userid),
+        changes: "{}",
+        date: day,
+        dateto: day,
+        _LJSL: "4096",
+      },
+      timeout: 12000,
+    });
+    if (!response.ok())
+      throw new Error("EduPage could not load the lesson timetable.");
+    const result = lessonPlan(await response.text(), data.userid);
+    Object.assign(
+      days,
+      Object.fromEntries(
+        Object.entries(result).filter(([d]) => d >= date && d <= dateAt(13)),
+      ),
+    );
+  }
+  return {
+    lessons: lessonsFrom(days, data.dbi, session.origin),
+    lessonDates: Object.keys(days).filter((d) => Array.isArray(days[d]?.plan)),
+  };
+}
+async function collect(key, session, includeLessons = false) {
   await session.page.goto(session.origin + "/user/", {
     waitUntil: "domcontentloaded",
     timeout: 30000,
@@ -226,6 +282,8 @@ async function collect(key, session) {
   if (Array.isArray(timeline.homeworks))
     data.homeworks = [...(data.homeworks || []), ...timeline.homeworks];
   const result = assignmentsFrom(data, session.origin);
+  if (includeLessons)
+    Object.assign(result, await collectLessons(session, data));
   await persist(key, session);
   return result;
 }
@@ -294,7 +352,7 @@ app.post("/:key/:action", async (req, res) => {
         throw new Error(
           "Finish the EduPage connection screen before automatic sync.",
         );
-      return collect(key, session);
+      return collect(key, session, req.body.includeLessons === true);
     }
     throw new Error("Unsupported browser operation.");
   });

@@ -142,3 +142,102 @@ export function assignmentsFrom(
     skipped,
   };
 }
+
+export function lessonPlan(response, userId) {
+  const marker = JSON.stringify(userId) + ",";
+  const offset = response.indexOf(marker);
+  const json =
+    offset < 0 ? "" : response.slice(offset + marker.length).trimStart();
+  // gcall embeds the plan as a JSON object among other response arguments.
+  if (json.startsWith("{")) {
+    let depth = 0,
+      quoted = false,
+      escaped = false;
+    for (let i = 0; i < json.length; i++) {
+      const ch = json[i];
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (ch === "\\") escaped = true;
+        else if (ch === '"') quoted = false;
+      } else if (ch === '"') quoted = true;
+      else if (ch === "{") depth++;
+      else if (ch === "}" && --depth === 0) {
+        const data = JSON.parse(json.slice(0, i + 1));
+        if (data.dates && typeof data.dates === "object") return data.dates;
+        break;
+      }
+    }
+  }
+  throw new Error(
+    "EduPage did not return a personal timetable for this account.",
+  );
+}
+
+export function lessonsFrom(dates, dbi, origin) {
+  const events = new Map();
+  const names = (table, ids) =>
+    (ids || [])
+      .map((id) => {
+        const row = dbi?.[table]?.[id];
+        return (
+          row &&
+          clean(
+            row.name ||
+              [row.firstname, row.lastname].filter(Boolean).join(" ") ||
+              row.short,
+          )
+        );
+      })
+      .filter(Boolean)
+      .join(", ");
+  for (const [date, day] of Object.entries(dates)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !day?.plan) continue;
+    for (const lesson of Object.values(day.plan)) {
+      const subject =
+        names("subjects", [lesson.subjectid]) || clean(lesson.subject);
+      if (!subject || lesson.header?.[0]?.cmd === "addlesson_t") continue;
+      const time = (value) =>
+        /^\d{1,2}:\d{2}$/.test(value) ? value.padStart(5, "0") : null;
+      const start = time(lesson.starttime),
+        end = time(lesson.endtime);
+      if (!start || !end || end <= start) continue;
+      const slot = String(lesson.uniperiod || start);
+      const id = "lesson:" + new URL(origin).hostname + ":" + date + ":" + slot;
+      const cancelled =
+        [true, 1, "1"].includes(lesson.removed) ||
+        lesson.type === "absent" ||
+        lesson.type === "";
+      const substitute = !!(
+        lesson.flags?.subst ||
+        lesson.substitution ||
+        ["subst", "substitution"].includes(lesson.type) ||
+        lesson.infos?.some?.((info) => /subst/i.test(info.type))
+      );
+      const teacher = names("teachers", lesson.teacherids),
+        room = names("classrooms", lesson.classroomids);
+      const item = {
+        kind: "lesson",
+        id,
+        date,
+        subject,
+        title:
+          (cancelled ? "Canceled · " : substitute ? "Substitution · " : "") +
+          subject,
+        start: date + "T" + start + ":00",
+        end: date + "T" + end + ":00",
+        teacher,
+        room,
+        cancelled,
+        url: origin + "/dashboard/eb.php?mode=ttday",
+      };
+      // A replacement and the removed original can both be present for one period.
+      const prior = events.get(id);
+      if (prior && prior.cancelled !== cancelled) {
+        const replacement = cancelled ? prior : item;
+        replacement.title = "Substitution · " + replacement.subject;
+        events.set(id, replacement);
+      } else events.set(id, item);
+    }
+  }
+  return [...events.values()];
+}

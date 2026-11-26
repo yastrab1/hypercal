@@ -21,7 +21,11 @@ export function filteredAssignments(items, config) {
   );
   return items.filter(
     (item) =>
-      (item.kind === "exam" ? config.exams : config.homework) &&
+      (item.kind === "lesson"
+        ? !!config.lessonCalendarId
+        : item.kind === "exam"
+          ? config.exams
+          : config.homework) &&
       !excluded.has(item.subject.trim().toLocaleLowerCase()) &&
       !pattern?.test(
         `${item.subject}\n${item.title}\n${item.description || ""}`,
@@ -30,6 +34,29 @@ export function filteredAssignments(items, config) {
 }
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 export function assignmentEvent(instance, item) {
+  if (item.kind === "lesson") {
+    const zone = "Europe/Bratislava";
+    return {
+      id:
+        "hc" +
+        digest(`${instance.owner}:${instance.id}:${item.id}`).slice(0, 48),
+      summary: item.title,
+      location: item.room,
+      description: [
+        item.teacher && "Teacher: " + item.teacher,
+        item.room && "Učebňa: " + item.room,
+        "Source: " + item.url,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      start: { dateTime: item.start, timeZone: zone },
+      end: { dateTime: item.end, timeZone: zone },
+      transparency: item.cancelled ? "transparent" : "opaque",
+      extendedProperties: {
+        private: { hypercalPlugin: instance.id, hypercalSourceId: item.id },
+      },
+    };
+  }
   const start = item.date;
   const endDate = new Date(start + "T12:00:00Z");
   endDate.setUTCDate(endDate.getUTCDate() + 1);
@@ -71,18 +98,42 @@ function eventPatch(body, remote) {
 export async function syncAssignments(
   instance,
   items,
-  { request, save, check = () => {} },
+  { request, save, check = () => {}, lessonDates = [] },
 ) {
   const selected = filteredAssignments(items, instance);
+  const excluded = items.length - selected.length;
+  const seen = new Set(
+    items.filter((i) => i.kind === "lesson").map((i) => i.id),
+  );
+  const covered = new Set(lessonDates);
+  for (const entry of Object.values(instance.sources)) {
+    const lesson = entry.lesson;
+    if (
+      lesson &&
+      entry.calendarId === instance.lessonCalendarId &&
+      lesson.url === instance.schoolUrl + "/dashboard/eb.php?mode=ttday" &&
+      covered.has(lesson.date) &&
+      !seen.has(lesson.id) &&
+      !lesson.cancelled
+    )
+      selected.push({
+        ...lesson,
+        title: "Canceled · " + lesson.subject,
+        cancelled: true,
+      });
+  }
+
   let created = 0,
     updated = 0,
     unchanged = 0;
-  const calendar = `calendars/${encodeURIComponent(instance.calendarId)}/events`;
   for (const item of selected) {
+    const destination =
+      item.kind === "lesson" ? instance.lessonCalendarId : instance.calendarId;
+    const calendar = `calendars/${encodeURIComponent(destination)}/events`;
     check();
     const body = assignmentEvent(instance, item);
     const fingerprint = digest(JSON.stringify(body));
-    const key = `${instance.calendarId}:${item.id}`;
+    const key = `${destination}:${item.id}`;
     const existing = instance.sources[key];
     if (existing?.fingerprint === fingerprint) {
       unchanged++;
@@ -123,14 +174,20 @@ export async function syncAssignments(
       });
       updated++;
     }
-    instance.sources[key] = { eventId: body.id, fingerprint };
+    instance.sources[key] = {
+      eventId: body.id,
+      fingerprint,
+      ...(item.kind === "lesson"
+        ? { calendarId: destination, lesson: item }
+        : {}),
+    };
     save();
   }
   return {
     created,
     updated,
     unchanged,
-    excluded: items.length - selected.length,
+    excluded,
     message: `${created} added, ${updated} updated, ${unchanged} unchanged.`,
     changed: created + updated > 0,
   };
