@@ -1,3 +1,4 @@
+import { TZDate } from "@date-fns/tz";
 import { dayDistance } from "./tags.mjs";
 import { eventColor } from "./event-colors.mjs";
 import {
@@ -158,8 +159,9 @@ export function EventPopover({
     setError("");
     setDestination(destinations[0]?.id || "");
   }, [event.id, event.calendarId]);
-  const start = eventDate(event.start),
-    end = eventDate(event.end);
+  const zone = event.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const start = event.allDay ? eventDate(event.start) : new TZDate(event.start, zone),
+    end = event.allDay ? eventDate(event.end) : new TZDate(event.end, zone);
   const last = event.allDay ? addDays(end, -1) : end;
   return (
     <FloatingCard
@@ -394,10 +396,10 @@ export function EventPopover({
           <span>Repeating event</span>
         </div>
       )}
-      <div className="preview-row preview-timezone">
+      {!event.allDay && <div className="preview-row preview-timezone">
         <Clock size={16} />
-        <span>{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
-      </div>
+        <span>{zone}</span>
+      </div>}
     </FloatingCard>
   );
 }

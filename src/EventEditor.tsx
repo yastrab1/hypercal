@@ -1,3 +1,4 @@
+import { eventInstant, zonedInput } from "./editor-time.mjs";
 import { SmartEventTitle } from "./SmartEventTitle";
 import { parseQuickDate, withoutDatePhrase } from "./quick-entry.mjs";
 import { cleanTags } from "./tags.mjs";
@@ -89,9 +90,15 @@ export function EventEditor({
   const disabled = readOnly || offline || busy;
   const start = event ? eventDate(event.start) : date,
     end = event ? eventDate(event.end) : new Date(+date + 3600000);
-  const [startInput, setStartInput] = useState(format(start, "yyyy-MM-dd")),
+  const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const [timezone, setTimezone] = useState(event?.timeZone || localZone);
+  const startWall = zonedInput(start, timezone);
+  const endWall = zonedInput(end, timezone);
+  const [startTime, setStartTime] = useState(startWall.slice(11));
+  const [endTime, setEndTime] = useState(endWall.slice(11));
+  const [startInput, setStartInput] = useState(event?.allDay ? event.start : startWall.slice(0, 10)),
     [endInput, setEndInput] = useState(
-      format(event?.allDay ? addDays(end, -1) : end, "yyyy-MM-dd"),
+      event?.allDay ? format(addDays(end, -1), "yyyy-MM-dd") : endWall.slice(0, 10),
     );
   const effectiveStart = quickDate?.date || startInput;
   const effectiveEnd = quickDate
@@ -115,7 +122,6 @@ export function EventEditor({
     setStartInput(effectiveStart);
     setEndInput(effectiveEnd);
   };
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const calendar = calendars.find((c) => c.id === calendarId);
   const writable = calendars.filter((c) => !c.readOnly);
   // Calendars can finish loading (or permissions change) after the editor
@@ -158,18 +164,18 @@ export function EventEditor({
       return;
     }
     const f = new FormData(e.currentTarget);
+    try {
     const s = allDay
       ? effectiveStart
-      : new Date(`${effectiveStart}T${f.get("startTime")}`).toISOString();
+      : eventInstant(effectiveStart, startTime, timezone, event?.allDay ? undefined : event?.start);
     const t = allDay
       ? format(addDays(new Date(effectiveEnd + "T12:00:00"), 1), "yyyy-MM-dd")
-      : new Date(`${effectiveEnd}T${f.get("endTime")}`).toISOString();
+      : eventInstant(effectiveEnd, endTime, timezone, event?.allDay ? undefined : event?.end);
     if (new Date(t) <= new Date(s)) {
       setError("End must be after start.");
       return;
     }
     setBusy(true);
-    try {
       await onSave(
         {
           id: event?.id || "",
@@ -325,7 +331,7 @@ export function EventEditor({
                     required
                     name="startTime"
                     type="time"
-                    defaultValue={format(start, "HH:mm")}
+                    value={startTime} onChange={(e) => setStartTime(e.target.value)}
                   />
                 </label>
               )}
@@ -354,15 +360,17 @@ export function EventEditor({
                     required
                     name="endTime"
                     type="time"
-                    defaultValue={format(end, "HH:mm")}
+                    value={endTime} onChange={(e) => setEndTime(e.target.value)}
                   />
                 </label>
               )}
             </div>
-            <div className="event-detail-row">
+            {!allDay && <div className="event-detail-row">
               <Globe size={20} />
-              <span>{timezone}</span>
-            </div>
+              <select aria-label="Time zone" value={timezone} onChange={e => setTimezone(e.target.value)}>
+                {Array.from(new Set([timezone, localZone, "UTC", ...Intl.supportedValuesOf("timeZone")])).map(zone => <option key={zone}>{zone}</option>)}
+              </select>
+            </div>}
             {!event && (
               <div className="event-detail-row event-repeat-row">
                 <Repeat2 size={20} />

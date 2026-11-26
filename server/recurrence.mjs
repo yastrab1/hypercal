@@ -39,14 +39,14 @@ function fromWall(value, zone) {
 }
 export function shiftSeriesTime(base, source, desired, zone) {
   const delta =
-    Date.parse(wall(desired, zone) + "Z") -
+    Date.parse(wall(desired, desired.timeZone || zone) + "Z") -
     Date.parse(wall(source, zone) + "Z");
   const next = new Date(Date.parse(wall(base, zone) + "Z") + delta)
     .toISOString()
     .slice(0, 19);
   return desired.date
     ? { date: next.slice(0, 10) }
-    : { dateTime: fromWall(next, zone), timeZone: zone };
+    : { dateTime: fromWall(next, desired.timeZone || zone), timeZone: desired.timeZone || zone };
 }
 export function splitRules(master, originalStart) {
   const zone = master.start.timeZone || originalStart.timeZone || "UTC";
@@ -292,7 +292,7 @@ export async function changeRecurring({
 // Explicit weekday constraints must move with a rescheduled weekly series.
 export function shiftWeekdays(rules, source, desired, zone) {
   const a = wall(source, zone).slice(0, 10),
-    b = wall(desired, zone).slice(0, 10);
+    b = wall(desired, desired.timeZone || zone).slice(0, 10);
   const days = Math.round(
     (Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000,
   );
