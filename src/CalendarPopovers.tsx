@@ -72,6 +72,7 @@ function FloatingCard({
     ref.current?.querySelector<HTMLElement>("button,a[href]")?.focus();
     const outside = (e: PointerEvent) => {
       const target = e.target as HTMLElement;
+      if (target.closest("dialog:modal")) return;
       if (ref.current?.contains(target) || anchor.contains(target)) return;
       if (
         className === "day-overflow" &&
@@ -143,13 +144,13 @@ export function EventPopover({
   onEdit: () => void;
   calendars: Calendar[];
   actionsDisabled: boolean;
-  onDelete: () => Promise<void>;
+  onDelete: () => void;
   onCopy: (calendarId: string) => Promise<void>;
 }) {
   const destinations = calendars.filter(
     (c) => !c.readOnly && c.id !== event.calendarId,
   );
-  const [action, setAction] = useState<"delete" | "copy" | null>(null);
+  const [action, setAction] = useState<"copy" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [destination, setDestination] = useState(destinations[0]?.id || "");
@@ -192,11 +193,7 @@ export function EventPopover({
             aria-label="Delete event"
             title="Delete event"
             disabled={busy || actionsDisabled}
-            aria-pressed={action === "delete"}
-            onClick={() => {
-              setError("");
-              setAction(action === "delete" ? null : "delete");
-            }}
+            onClick={onDelete}
           >
             <Trash2 size={18} />
           </button>
@@ -255,48 +252,6 @@ export function EventPopover({
           </p>
         </div>
       </div>
-      {action === "delete" && (
-        <div className="popover-action-section">
-          <p>
-            Delete this {event.recurring ? "occurrence" : "event"}
-            {calendar?.name ? ` from ${calendar.name}` : ""}?
-          </p>
-          <div className="popover-action-buttons">
-            <button
-              className="danger-button"
-              disabled={busy || actionsDisabled}
-              onClick={async () => {
-                setBusy(true);
-                setError("");
-                try {
-                  await onDelete();
-                } catch (e) {
-                  setError((e as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {busy ? (
-                <LoaderCircle size={15} className="spin" />
-              ) : (
-                <Trash2 size={15} />
-              )}
-              Confirm delete
-            </button>
-            <button
-              disabled={busy}
-              className="secondary-button"
-              onClick={() => {
-                setAction(null);
-                setError("");
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
       {action === "copy" && (
         <form
           className="popover-action-section"

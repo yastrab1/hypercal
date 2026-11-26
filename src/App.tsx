@@ -1,3 +1,4 @@
+import { DeleteEventDialog } from "./DeleteEventDialog";
 import { TagSettings } from "./TagSettings";
 import { AppVersion } from "./AppVersion";
 import { PluginsPanel } from "./PluginsPanel";
@@ -147,6 +148,7 @@ const shortcutGroups = [
     title: "Take action",
     items: [
       ["C", "Create an event"],
+      ["Delete / Backspace", "Confirm deletion of the selected event"],
       ["⌘ / Ctrl K", "Open command palette"],
       ["Ctrl/Cmd F / /", "Filter visible events"],
       ["⌘ / Ctrl ↵", "Save an editor"],
@@ -350,6 +352,7 @@ export default function App() {
     | "find"
     | null
   >(null);
+  const [deleteTarget, setDeleteTarget] = useState<CalendarEvent | null>(null);
   const [recurrenceRequest, setRecurrenceRequest] = useState<{
     action: "edit" | "delete";
     resolve: (scope: RecurrenceScope | null) => void;
@@ -1111,7 +1114,7 @@ export default function App() {
   }
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
-      if (sharedRoute) return;
+      if (sharedRoute || deleteTarget) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPanel((p) => (p === "palette" ? null : "palette"));
@@ -1131,6 +1134,13 @@ export default function App() {
       }
       if (!shortcuts || e.ctrlKey || e.metaKey || e.altKey || e.isComposing)
         return;
+      if ((e.key === "Delete" || e.key === "Backspace") && !e.shiftKey && !e.repeat &&
+          !(e.target as HTMLElement).closest("input,textarea,select,[contenteditable],form") &&
+          !panel && preview && !preview.event.readOnly && (!live || canWrite)) {
+        e.preventDefault();
+        setDeleteTarget(preview.event);
+        return;
+      }
       if (e.key === "Escape" && sidebar) {
         e.preventDefault();
         setSidebar(false);
@@ -1283,9 +1293,8 @@ export default function App() {
     close();
     flash("Saved to Google Calendar.");
   }
-  async function deleteEvent(e: CalendarEvent) {
-    const scope = await requestScope(e, "delete");
-    if (!scope) return;
+  async function deleteEvent(e: CalendarEvent, scope: RecurrenceScope) {
+    if (e.readOnly) throw new Error("This event is read-only.");
     if (live && !canWrite)
       throw new Error("Connect and finish syncing before deleting events.");
     if (live)
@@ -1293,7 +1302,7 @@ export default function App() {
         method: "DELETE",
         body: JSON.stringify({ calendarId: e.calendarId, etag: e.etag, scope }),
       });
-    else setEvents((es) => es.filter((x) => x.id !== e.id));
+    else setEvents((es) => es.filter((x) => x.id !== e.id || x.calendarId !== e.calendarId));
     if (live) {
       calendarCache.invalidateEvents(accountId!);
       setEvents((es) =>
@@ -2122,7 +2131,7 @@ export default function App() {
           calendar={calendars.find((c) => c.id === preview.event.calendarId)}
           calendars={calendars}
           actionsDisabled={live && !canWrite}
-          onDelete={() => deleteEvent(preview.event)}
+          onDelete={() => setDeleteTarget(preview.event)}
           onCopy={(destination) => copyEvent(preview.event, destination)}
           onClose={closePreview}
           onEdit={() => openEdit(preview.event)}
@@ -2134,6 +2143,7 @@ export default function App() {
           {notice}
         </div>
       )}
+      {deleteTarget && <DeleteEventDialog event={deleteTarget} onCancel={() => setDeleteTarget(null)} onDelete={async scope => {await deleteEvent(deleteTarget,scope);setDeleteTarget(null);}}/>}
       {recurrenceRequest && (
         <RecurrenceDialog
           action={recurrenceRequest.action}
@@ -2166,7 +2176,7 @@ export default function App() {
             notificationDefault={notificationDefault}
             onClose={close}
             onSave={saveEvent}
-            onDelete={deleteEvent}
+            onDelete={setDeleteTarget}
           />
         </Panel>
       )}

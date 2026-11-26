@@ -53,7 +53,7 @@ export function EventEditor({
     recurrence: string,
     interval?: { every: number; unit: "day" | "month" | "year" },
   ) => Promise<void>;
-  onDelete: (e: CalendarEvent) => Promise<void>;
+  onDelete: (e: CalendarEvent) => void;
   onClose: () => void;
 }) {
   const [details, setDetails] = useState(!!event);
@@ -67,8 +67,7 @@ export function EventEditor({
   const [color, setColor] = useState(event?.color || "");
   const [allDay, setAllDay] = useState(event?.allDay || false),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [deleting, setDeleting] = useState(false);
+    [error, setError] = useState("");
   const defaultCalendarId = () =>
     calendars.find((c) => c.primary && !c.readOnly)?.id ||
     calendars.find((c) => !c.readOnly)?.id ||
@@ -615,23 +614,10 @@ export function EventEditor({
               type="button"
               className="danger-button"
               disabled={disabled}
-              onClick={async () => {
-                if (!deleting) {
-                  setDeleting(true);
-                  return;
-                }
-                setBusy(true);
-                try {
-                  await onDelete(event);
-                } catch (e) {
-                  setError((e as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
+              onClick={() => onDelete(event)}
             >
               <Trash2 size={16} />
-              {deleting ? "Confirm delete" : "Delete event"}
+              Delete event
             </button>
           )}
         </div>

@@ -5733,3 +5733,23 @@ label.quick-calendar-chip {
   width: 100%;
   margin: 4px 0 0;
 }
+
+.delete-event-dialog[open] {
+  inset: 0;
+  margin: 0;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  border: 0;
+  padding: 20px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text);
+}
+.delete-event-dialog::backdrop { background: rgb(0 0 0 / 65%); }
+.delete-event-dialog section { width: min(100%, 390px); padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); overflow-wrap: anywhere; }
+.delete-event-dialog h2 { margin: 0; font-size: 21px; }
+.delete-event-dialog fieldset label { display: flex; gap: 8px; padding: 6px; }
+.delete-event-dialog footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
