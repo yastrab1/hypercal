@@ -5753,3 +5753,7 @@ label.quick-calendar-chip {
 .delete-event-dialog h2 { margin: 0; font-size: 21px; }
 .delete-event-dialog fieldset label { display: flex; gap: 8px; padding: 6px; }
 .delete-event-dialog footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+
+.month-week .month-events { display: grid; grid-auto-rows: var(--ribbon-step); align-items: start; }
+.month-events .more-events { justify-self: start; }
+.month-events .event-chip { max-height: var(--ribbon-height); }

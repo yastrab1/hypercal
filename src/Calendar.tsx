@@ -149,7 +149,7 @@ export function CalendarCanvas(props: Props) {
     const capacity = Math.max(
       1,
       Math.floor(
-        ((monthHeight - 36) / weeks - (mobile ? 27 : 32) - 18) /
+        ((monthHeight - 36) / weeks - (mobile ? 31 : 40)) /
           (mobile ? 16 : 22),
       ),
     );
@@ -346,20 +346,21 @@ const MonthWeek = memo(function MonthWeek({
   color: Color;
   actions: Actions;
 }) {
-  const lanes = week.ribbons.reduce((n, s) => Math.max(n, s.lane + 1), 0),
-    visibleLanes = Math.min(lanes, capacity),
-    remaining = Math.max(0, capacity - visibleLanes);
+  const visibleRibbons = week.ribbons.filter(segment =>
+    segment.lane < capacity && (segment.lane < capacity - 1 ||
+      week.days.slice(segment.start, segment.end + 1).every(day => day.all.length <= capacity)));
   return (
     <div
       className="month-week"
-      style={{ "--ribbon-lanes": visibleLanes } as React.CSSProperties}
     >
       {week.days.map((day, i) => {
         const es = day.single;
-        const hidden =
-          week.ribbons.filter(
-            (s) => s.lane >= visibleLanes && i >= s.start && i < s.end,
-          ).length + Math.max(0, es.length - remaining);
+        const occupied = new Set(visibleRibbons.filter(s => i >= s.start && i <= s.end).map(s => s.lane));
+        const free = Array.from({length: capacity}, (_, n) => n).filter(n => !occupied.has(n));
+        const hiddenRibbons = day.spanning.length - occupied.size;
+        const overflow = hiddenRibbons > 0 || es.length > free.length;
+        const slots = overflow ? free.slice(0, -1) : free;
+        const hidden = hiddenRibbons + Math.max(0, es.length - slots.length);
         return (
           <div
             key={i}
@@ -386,14 +387,9 @@ const MonthWeek = memo(function MonthWeek({
             >
               +
             </button>
-            <div
-              className="month-events"
-              style={{
-                paddingTop: `calc(${visibleLanes} * var(--ribbon-step))`,
-              }}
-            >
-              {es.slice(0, remaining).map((e) => (
-                <EventChip
+            <div className="month-events">
+              {es.slice(0, slots.length).map((e, index) => (
+                <EventChip row={slots[index] + 1}
                   key={`${e.calendarId}:${e.id}`}
                   event={e}
                   color={color}
@@ -402,6 +398,7 @@ const MonthWeek = memo(function MonthWeek({
               ))}
               {hidden > 0 && (
                 <button
+                  style={{gridRow:free.at(-1)! + 1}}
                   className="more-events"
                   aria-label={`Show all events on ${format(day.date, "MMMM d")}`}
                   onClick={(ev) =>
@@ -421,11 +418,10 @@ const MonthWeek = memo(function MonthWeek({
       <div
         className="ribbon-layer"
         style={{
-          gridTemplateRows: `repeat(${visibleLanes},var(--ribbon-height))`,
+          gridTemplateRows: `repeat(${capacity},var(--ribbon-height))`,
         }}
       >
-        {week.ribbons
-          .filter((s) => s.lane < visibleLanes)
+        {visibleRibbons
           .map((s) => (
             <Ribbon
               key={`${s.event.calendarId}:${s.event.id}`}
@@ -440,10 +436,12 @@ const MonthWeek = memo(function MonthWeek({
   );
 });
 function EventChip({
+  row,
   event: e,
   color,
   actions,
 }: {
+  row: number;
   event: CalendarEvent;
   color: Color;
   actions: Actions;
@@ -451,7 +449,7 @@ function EventChip({
   return (
     <button
       className={`event-chip compact ${e.allDay ? "all-day" : ""}`}
-      style={{ "--event-color": color(e) } as React.CSSProperties}
+      style={{gridRow:row, "--event-color": color(e) } as React.CSSProperties}
       onClick={(ev) => {
         ev.stopPropagation();
         actions.onEvent(e, ev.currentTarget);
