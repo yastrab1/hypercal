@@ -2404,10 +2404,15 @@ kbd {
   position: relative;
   min-height: 0;
   overflow: hidden;
-  border-bottom: 1px solid var(--line);
 }
-.month-week:last-child {
-  border-bottom: 0;
+.month-week + .month-week::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--line);
+  z-index: 1;
+  pointer-events: none;
 }
 .month-week .month-cell {
   min-width: 0;
