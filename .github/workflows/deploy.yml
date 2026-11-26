@@ -23,6 +23,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Skip builds superseded on main
         id: current

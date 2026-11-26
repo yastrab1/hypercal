@@ -5,7 +5,7 @@ set -euo pipefail
 [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
 root=/home/r2d2/hypercal
 compose=/home/r2d2/unified/docker-compose.yml
-origin=https://r2d2.tail6caf54.ts.net:10000
+origin=https://r2d2.tail6caf54.ts.net:8446
 exec 9>"$root/.deploy.lock"
 flock 9
 
@@ -22,6 +22,14 @@ print('Verified Android artifact:',m['versionName'],m['versionCode'],m['sha256']
 PY
 image="hypercal:sha-$GITHUB_SHA"
 docker build --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$image" .
+worker_container=$(docker compose -f "$compose" ps -q hypercal-browser)
+previous_worker=$(docker inspect "$worker_container" --format '{{.Image}}')
+deployed=$(cat "$root/.deployed-sha" 2>/dev/null || true)
+worker_changed=false
+if ! git diff --quiet "$deployed" "$GITHUB_SHA" -- worker 2>/dev/null; then
+  worker_changed=true
+  docker build -f worker/Dockerfile -t "hypercal-browser:sha-$GITHUB_SHA" .
+fi
 if [[ "$(git ls-remote origin refs/heads/main | cut -f1)" != "$GITHUB_SHA" ]]; then
   echo 'A newer main build superseded this deployment.'
   exit 0
@@ -34,6 +42,10 @@ cp -a "$root/dist/downloads/." "$backup/"
 rollback() {
   echo 'Deployment failed; restoring previous image and Android downloads.' >&2
   cp -a "$backup/." "$root/dist/downloads/"
+  if [[ "$worker_changed" == true ]]; then
+    docker tag "$previous_worker" hypercal-browser:local
+    docker compose -f "$compose" up -d --no-deps --no-build hypercal-browser
+  fi
   docker tag "$previous" hypercal:local
   docker compose -f "$compose" up -d --no-deps --no-build hypercal
 }
@@ -44,6 +56,10 @@ for name in hypercal-debug.apk hypercal-debug.apk.sha256 android-update.json; do
   install -m 644 "$ANDROID_ARTIFACT_DIR/$name" "$root/dist/downloads/.$name.next"
   mv -f "$root/dist/downloads/.$name.next" "$root/dist/downloads/$name"
 done
+if [[ "$worker_changed" == true ]]; then
+  docker tag "hypercal-browser:sha-$GITHUB_SHA" hypercal-browser:local
+  docker compose -f "$compose" up -d --no-deps --no-build --wait --wait-timeout 90 hypercal-browser
+fi
 docker tag "$image" hypercal:local
 docker compose -f "$compose" up -d --no-deps --no-build hypercal
 for attempt in $(seq 1 30); do
